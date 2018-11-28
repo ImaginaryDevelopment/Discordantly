@@ -11,14 +11,17 @@ let logAsync msg : Task =
 let readyAsync():Task =
     printfn "Ready!"
     Task.CompletedTask
-let msgAsync (sm:SocketMessage) : Task =
+let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
     printfn "Msg! %A" sm.Source
-    //async{
-    //    do! ()
-        
-    //}
-    //|> Async.StartAsTask
-    Task.CompletedTask
+    async{
+        let client = fClient()
+        if sm.Author.Id <> client.CurrentUser.Id && sm.Content = "!ping" then
+            let! x = Async.AwaitIAsyncResult <| sm.Channel.SendMessageAsync("pong!")
+            ()
+    }
+    |> Async.StartAsTask
+    :> Task
+
 type TaskResult<'t> =
     | Happy of 't
     | Unhappy of string*exn option
@@ -32,7 +35,7 @@ let mainAsync () : Task<_> =
     let client = new DiscordSocketClient()
     client.add_Log(Func<_,_>(logAsync))
     client.add_Ready(Func<_> readyAsync)
-    client.add_MessageReceived(Func<_,_> msgAsync)
+    client.add_MessageReceived(Func<_,_> (msgAsync (fun () -> client)))
     async{
         printfn "Starting login"
         let token = Environment.GetEnvironmentVariable("discordToken")
