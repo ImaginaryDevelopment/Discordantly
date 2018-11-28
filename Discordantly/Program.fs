@@ -13,11 +13,12 @@ let readyAsync():Task =
     Task.CompletedTask
 let msgAsync (sm:SocketMessage) : Task =
     printfn "Msg! %A" sm.Source
-    async{
-        do! ()
+    //async{
+    //    do! ()
         
-    }
-    |> Async.StartAsTask
+    //}
+    //|> Async.StartAsTask
+    Task.CompletedTask
 type TaskResult<'t> =
     | Happy of 't
     | Unhappy of string*exn option
