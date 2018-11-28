@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28306.52
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Discordantly", "Discordantly\Discordantly.fsproj", "{038E544E-201B-404C-B01F-60DBAF438B63}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{038E544E-201B-404C-B01F-60DBAF438B63}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{038E544E-201B-404C-B01F-60DBAF438B63}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{038E544E-201B-404C-B01F-60DBAF438B63}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{038E544E-201B-404C-B01F-60DBAF438B63}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8047826B-E177-4574-9950-56A65C80CBC6}
+	EndGlobalSection
+EndGlobal
