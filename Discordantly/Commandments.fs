@@ -15,8 +15,22 @@ type ClientProxy(client:DiscordSocketClient) =
     member __.GetUser id = client.GetUser(id=id)
     member __.GetUser (username, discriminator) = client.GetUser(username, discriminator)
 module SocketMessage =
-    let reply (sm:SocketMessage) (txt:string) :Task=
+    let reply' (sm:SocketMessage) (txt:string) :Task=
         upcast sm.Channel.SendMessageAsync txt
+    let reply(sm:SocketMessage) (txt:string list) :Task =
+        let single x :Task = upcast sm.Channel.SendMessageAsync x
+        match txt with
+        | [] -> single "Tell my creator that, due to creative differences, I will not reply to that message"
+        | x::[] ->  single x
+        | replies ->
+            async{
+                for x in replies do
+                    do! sm.Channel.SendMessageAsync x
+                        |> Async.AwaitTask
+                        |> Async.Ignore
+            }
+            |> Async.StartAsTask
+            :> Task
     //abstract member () ()
 // [<NoSubstitute("for you")>]
 [<NoEquality;NoComparison>]
@@ -31,22 +45,33 @@ type Command = {Trigger:string;ReplyType:ReplyType}
 // profile tracking, etc
 module Exiling =
     open Regex
+    type private ExileMap = Map<uint64,string>
     module Impl =
-        let mutable profiles = Map.empty
+        module Profiling =
+            open System
+            let get,set =
+                Storage.createGetSet<ExileMap> "Exiling"
+
+        let mutable profiles =
+            Profiling.get()
+            |> Option.defaultValue Map.empty
+
         let findExileUser (cp:ClientProxy) username =
             profiles
             |> Map.tryPick(fun uid profileName ->
-                let u = cp.GetUser(uid)
+                let u = cp.GetUser uid
                 if u.Username = username then
                     Some (u,profileName)
                 else None
             )
-        let onProfileSearch reply =
+        let onProfileSearch =
             function
                 | un, Some(_user,pn) ->
-                    reply <| sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
+                    [   sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
+                        sprintf "[Profile Link](https://www.pathofexile.com/account/view-profile/%s/characters)" pn
+                    ]
                 | un, None ->
-                    reply <| sprintf "♪ My baloney has a first name ♪, however %s, does not." un
+                    [sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
 
         // trimming the end in case there were stray spaces
         let (|ProfileName|_|) =
@@ -61,15 +86,15 @@ module Exiling =
             | RMatchGroup "\w.+$" 0 (Trim userName) ->
                 Some userName
             | _ -> None
-        let getAuthorProfile (su:SocketUser) cp singleReply =
+        let getAuthorProfile (su:SocketUser) cp =
             (su.Username, findExileUser cp su.Username)
-            |> onProfileSearch singleReply 
+            |> onProfileSearch
     open Impl
+    open System.Net.Sockets
 
 
     let setProfile =
         "setProfile", Complex (fun cp sm ->
-            let singleReply txt = SocketMessage.reply sm txt
             match sm.Content with
             | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
                 profiles <-
@@ -77,12 +102,12 @@ module Exiling =
                     |> Map.add sm.Author.Id profileName
                 async {
                     do!
-                        sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName
+                        [sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName]
                         |> SocketMessage.reply sm
                         |> Async.AwaitTask
                         |> Async.Ignore
                     do!
-                        sprintf "I am still a child, don't expect me to remember for long. I have a lot of growing to do."
+                        [sprintf "I am still a child, don't expect me to remember for long. I have a lot of growing to do."]
                         |> SocketMessage.reply sm
                         |> Async.AwaitTask
                         |> Async.Ignore
@@ -92,7 +117,8 @@ module Exiling =
                 |> Some
             | RMatch "setProfile$" _ ->
                 (sm.Author.Username, findExileUser cp sm.Author.Username)
-                |> onProfileSearch singleReply 
+                |> onProfileSearch
+                |> SocketMessage.reply sm
                 |> Some
             | _ -> None
 
@@ -100,14 +126,15 @@ module Exiling =
     let getProfile =
         "getProfile", 
             Complex (fun cp sm ->
-                let singleReply = SocketMessage.reply sm
                 match sm.Content with
                 | After "getProfile " (UserName userName) ->
                     (userName,findExileUser cp userName)
-                    |> onProfileSearch singleReply
+                    |> onProfileSearch
+                    |> SocketMessage.reply sm
                     |> Some
                 | RMatch "getProfile\s*$" _ ->
-                    getAuthorProfile sm.Author cp singleReply
+                    getAuthorProfile sm.Author cp
+                    |> SocketMessage.reply sm
                     |> Some
                 | _ -> None
             )

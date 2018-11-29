@@ -43,5 +43,48 @@ module Regex =
             else
                 Some m.Groups.[i].Value
         | _ -> None
+module SuperSerial =
+    open Newtonsoft.Json
+    let inline serialize (x:_) = JsonConvert.SerializeObject(value=x)
+    let inline deserialize<'t> x :'t option = 
+        try
+            JsonConvert.DeserializeObject<'t>(x)
+            |> Some
+        with ex ->
+            System.Diagnostics.Trace.WriteLine(sprintf "Error deserialization failed:%s" ex.Message)
+            None
+
+module Storage =
+    open System
+    open System.IO
+    open SuperSerial
+    open Discord.WebSocket
+
+    let private folderPath = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Discordantly")
+    let private getKeyPath key = Path.Combine(folderPath,sprintf "%s.json" key)
+    let getKeyValue key =
+        let keyPath = getKeyPath key
+        if Directory.Exists folderPath && File.Exists keyPath then
+            File.ReadAllText keyPath |> deserialize 
+        else None
+    let setKeyValue key value =
+        if not <| Directory.Exists folderPath then
+            Directory.CreateDirectory folderPath |> ignore
+        let keyPath = getKeyPath key
+        match value with
+        | None ->
+            if File.Exists keyPath then
+                File.Delete keyPath
+        | Some value ->
+            File.WriteAllText(keyPath,serialize value)
+
+    // allows simple creation of mated pairs of 't option with get,set
+    let createGetSet<'t> key:(unit -> 't option)* ('t option -> unit)=
+        let getter () = getKeyValue key
+        let setter vOpt = setKeyValue key vOpt
+        getter, setter
 
 
+
+
+        
