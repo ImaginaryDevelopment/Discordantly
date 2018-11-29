@@ -6,6 +6,7 @@ open Discord.WebSocket
 open Discord
 
 open Discordantly
+open Discordantly.Commandments
 
 let logAsync msg : Task =
     printfn "%A" msg
@@ -15,16 +16,25 @@ let readyAsync():Task =
     Task.CompletedTask
 let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
     printfn "Msg! %A" sm.Source
+    let notFound = "Dude, where's my response dude?"
+
+
     async{
         let send = sm.Channel.SendMessageAsync >> ignore
         let client = fClient()
-        if sm.Author.Id = client.CurrentUser.Id || sm.Content |> String.IsNullOrWhiteSpace then
+        match (sm.Author.Id, client.CurrentUser.Id,sm.Content) with
+        | IgnoranceIsBliss ->
             ()
-        else
-            if Commandments.simpleReplies.ContainsKey sm.Content then
-                send Commandments.simpleReplies.[sm.Content]
-            else
-                ()
+        | Simpleton txt ->
+            send txt
+        | NotSimpleton (cmdName, Complex f) ->
+            match f (ClientProxy client) sm with
+            | Some r -> r |> ignore<Task>
+            | None -> send <| sprintf "Could not understand command arguments for %s" cmdName
+        | NotSimpleton (cmdName, _) ->
+            send <| sprintf "Tell my creator he needs to learn how to code better"
+        | UhOh ->
+            send notFound
     }
     |> Async.StartAsTask
     :> Task
@@ -57,7 +67,7 @@ let mainAsync () : Task<_> =
     |> Async.StartAsTask
 
 [<EntryPoint>]
-let main argv =
+let main _argv =
     printfn "Hello World from F#!"
     mainAsync().GetAwaiter().GetResult()
     
