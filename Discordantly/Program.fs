@@ -5,6 +5,8 @@ open System.Threading.Tasks
 open Discord.WebSocket
 open Discord
 
+open Discordantly
+
 let logAsync msg : Task =
     printfn "%A" msg
     Task.CompletedTask
@@ -14,23 +16,29 @@ let readyAsync():Task =
 let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
     printfn "Msg! %A" sm.Source
     async{
+        let send = sm.Channel.SendMessageAsync >> ignore
         let client = fClient()
-        if sm.Author.Id <> client.CurrentUser.Id && sm.Content = "!ping" then
-            let! x = Async.AwaitIAsyncResult <| sm.Channel.SendMessageAsync("pong!")
+        if sm.Author.Id = client.CurrentUser.Id || sm.Content |> String.IsNullOrWhiteSpace then
             ()
+        else
+            if Commandments.simpleReplies.ContainsKey sm.Content then
+                send Commandments.simpleReplies.[sm.Content]
+            else
+                ()
     }
     |> Async.StartAsTask
     :> Task
 
-type TaskResult<'t> =
-    | Happy of 't
-    | Unhappy of string*exn option
-let thenPrint title (x:Async<_>) =
-    async {
-        let! x = x
-        printfn "awaiting complete:%s" title
-        return x
-    }
+//type TaskResult<'t> =
+//    | Happy of 't
+//    | Unhappy of string*exn option
+//let thenPrint title (x:Async<_>) =
+//    async {
+//        let! x = x
+//        printfn "awaiting complete:%s" title
+//        return x
+//    }
+
 let mainAsync () : Task<_> =
     let client = new DiscordSocketClient()
     client.add_Log(Func<_,_>(logAsync))
