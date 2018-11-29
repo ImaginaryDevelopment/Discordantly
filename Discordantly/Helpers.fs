@@ -100,7 +100,13 @@ module Storage =
 
     // allows simple creation of mated pairs of 't option with get,set
     let createGetSet<'t> key:(unit -> 't option)* ('t option -> unit)=
-        let getter () = getKeyValue key
+        let getter () =
+            match getKeyValue key with
+            | None ->
+                printfn "I couldn't find my save file at %s" <| getKeyPath key
+                None
+            | Some x ->
+                Some x
         let setter vOpt = setKeyValue key vOpt
         getter, setter
 

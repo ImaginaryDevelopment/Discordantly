@@ -14,28 +14,56 @@ type ClientProxy(client:DiscordSocketClient) =
     member __.SetStatusAsync user = client.SetStatusAsync user
     member __.GetUser id = client.GetUser(id=id)
     member __.GetUser (username, discriminator) = client.GetUser(username, discriminator)
+type MessageType =
+    | Keepsies of string
+    | Deletesies of string
 module SocketMessage =
+    open Discord.Rest
+
+    type AsyncReplyWrapper = {RestUserMessage:Rest.RestUserMessage; DeleteMe:bool}
     let reply' (sm:SocketMessage) (txt:string) :Task<_>=
         upcast sm.Channel.SendMessageAsync txt
-    let reply(sm:SocketMessage) (txt:string list) :Task<_> =
-        let single x :Task<Rest.RestUserMessage list> = 
-            Async.StartAsTask <|
-                async {
-                    let! msg = sm.Channel.SendMessageAsync x 
-                    return [msg]
-                }
+    let reply(sm:SocketMessage) (txt:MessageType list) :Task<_> =
+        let single x :Async<AsyncReplyWrapper list> =
+            async {
+                let (deleteMe,x) =
+                    match x with
+                    | Keepsies x ->
+                        false, x
+                    | Deletesies x ->
+                        true, x
+                let! msg = sm.Channel.SendMessageAsync x
+                return [{RestUserMessage = msg; DeleteMe = deleteMe}]
+            }
         match txt with
-        | [] -> single "Tell my creator that, due to creative differences, I will not reply to that message"
+        | [] -> single (Keepsies "Tell my creator that, due to creative differences, I will not reply to that message")
         | x::[] -> single x
         | replies ->
-            async {
-                let! result =
-                    replies
-                    |> List.map(fun m ->
-                        sm.Channel.SendMessageAsync m
-                    )
-                    |> Task.WhenAll
-                return List.ofArray result
+            async{
+                let mutable items = List.empty
+                for r in replies do
+                    let deleteMe,txt =
+                        match r with
+                        | Keepsies txt ->
+                            false, txt
+                        | Deletesies txt ->
+                            true, txt
+                    let! result = sm.Channel.SendMessageAsync txt
+                    items <- {RestUserMessage=result; DeleteMe=deleteMe} :: items
+                    do! Async.Sleep 600
+                return items
+            }
+        |> fun pipe ->
+            async{
+                let! items = pipe
+                match items |> List.choose(fun m -> if m.DeleteMe then Some m.RestUserMessage else None) with
+                | [] ->
+                    return items
+                | x ->
+                    do! Async.Sleep 5000
+                    x |> List.map(fun x -> x.DeleteAsync())
+                    |> List.iter (Async.AwaitTask>>ignore)
+                    return items
             }
             |> Async.StartAsTask
 
@@ -57,6 +85,14 @@ module Exiling =
     open Regex
     type private ExileMap = Map<uint64,string>
     module Impl =
+        type LikeAProperty<'t>(initialValue:'t,fSideEffect) =
+            let mutable value = initialValue
+            member __.Value
+                with get() = value
+                and set v =
+                    value <- v
+                    fSideEffect value
+
         module Profiling =
             let get,set =
                 Storage.createGetSet<ExileMap> "Exiling"
@@ -76,11 +112,11 @@ module Exiling =
         let onProfileSearch =
             function
                 | un, Some(_user,pn) ->
-                    [   sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
-                        sprintf "[Profile Link](https://www.pathofexile.com/account/view-profile/%s/characters)" pn
-                    ]
+                        [   Keepsies <| sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
+                            Deletesies <| sprintf "Served, get it while it's hot: https://www.pathofexile.com/account/view-profile/%s/characters" pn
+                        ]
                 | un, None ->
-                    [sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
+                        [Keepsies <| sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
 
         // trimming the end in case there were stray spaces
         let (|ProfileName|_|) =
@@ -112,12 +148,12 @@ module Exiling =
                     |> Map.add sm.Author.Id profileName
                 async {
                     do!
-                        [sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName]
+                        [Keepsies <| sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName]
                         |> SocketMessage.reply sm
                         |> Async.AwaitTask
                         |> Async.Ignore
                     do!
-                        [sprintf "I am growing, and I think I'll remmeber this, but I may forget."]
+                        [Keepsies <| sprintf "I am growing, and I think I'll remember this, but I may forget."]
                         |> SocketMessage.reply sm
                         |> Async.AwaitTask
                         |> Async.Ignore
@@ -161,7 +197,7 @@ module Commandments =
          "ping","pong!"
          "play","would you like to play a game?"
          "poelink","https://jsfiddle.net/Maslow/e02ts1jy/show"
-         "language","I speak only F#"
+         "language","I'm always down to F#, do you speak my language? I hope you aren't a dirty C#er"
          "src", "https://github.com/ImaginaryDevelopment/Discordantly"
         ]
         |> List.map(fun (x,y) -> sprintf "!%s" x,y)
