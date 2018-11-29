@@ -43,6 +43,20 @@ module Regex =
             else
                 Some m.Groups.[i].Value
         | _ -> None
+
+module Async =
+    let map f x =
+        async{
+            let! x = x
+            return f x
+        }
+    let bind f x =
+        async{
+            let! x = x
+            let! x = f x
+            return x
+        }
+
 module SuperSerial =
     open Newtonsoft.Json
     let inline serialize (x:_) = JsonConvert.SerializeObject(value=x)
@@ -54,6 +68,11 @@ module SuperSerial =
             System.Diagnostics.Trace.WriteLine(sprintf "Error deserialization failed:%s" ex.Message)
             None
 
+// http://www.fssnip.net/hv/title/Extending-async-with-await-on-tasks
+type Microsoft.FSharp.Control.AsyncBuilder with
+    member x.Bind(t:System.Threading.Tasks.Task<'t>, f:'t -> Async<'r>) : Async<'r> =
+        x.Bind(Async.AwaitTask t,f)
+
 module Storage =
     open System
     open System.IO
@@ -62,12 +81,13 @@ module Storage =
 
     let private folderPath = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Discordantly")
     let private getKeyPath key = Path.Combine(folderPath,sprintf "%s.json" key)
-    let getKeyValue key =
+
+    let private getKeyValue key =
         let keyPath = getKeyPath key
         if Directory.Exists folderPath && File.Exists keyPath then
             File.ReadAllText keyPath |> deserialize 
         else None
-    let setKeyValue key value =
+    let private setKeyValue key value =
         if not <| Directory.Exists folderPath then
             Directory.CreateDirectory folderPath |> ignore
         let keyPath = getKeyPath key

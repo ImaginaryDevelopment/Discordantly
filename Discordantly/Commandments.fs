@@ -15,27 +15,37 @@ type ClientProxy(client:DiscordSocketClient) =
     member __.GetUser id = client.GetUser(id=id)
     member __.GetUser (username, discriminator) = client.GetUser(username, discriminator)
 module SocketMessage =
-    let reply' (sm:SocketMessage) (txt:string) :Task=
+    let reply' (sm:SocketMessage) (txt:string) :Task<_>=
         upcast sm.Channel.SendMessageAsync txt
-    let reply(sm:SocketMessage) (txt:string list) :Task =
-        let single x :Task = upcast sm.Channel.SendMessageAsync x
+    let reply(sm:SocketMessage) (txt:string list) :Task<_> =
+        let single x :Task<Rest.RestUserMessage list> = 
+            Async.StartAsTask <|
+                async {
+                    let! msg = sm.Channel.SendMessageAsync x 
+                    return [msg]
+                }
         match txt with
         | [] -> single "Tell my creator that, due to creative differences, I will not reply to that message"
-        | x::[] ->  single x
+        | x::[] -> single x
         | replies ->
-            async{
-                for x in replies do
-                    do! sm.Channel.SendMessageAsync x
-                        |> Async.AwaitTask
-                        |> Async.Ignore
+            async {
+                let! result =
+                    replies
+                    |> List.map(fun m ->
+                        sm.Channel.SendMessageAsync m
+                    )
+                    |> Task.WhenAll
+                return List.ofArray result
             }
             |> Async.StartAsTask
-            :> Task
+
+
     //abstract member () ()
 // [<NoSubstitute("for you")>]
 [<NoEquality;NoComparison>]
 type ReplyType =
     | Simple of string
+    //| Complex of (ClientProxy -> SocketMessage -> Task<Rest.RestUserMessage list> option)
     | Complex of (ClientProxy -> SocketMessage -> Task option)
 type TriggerType =
     | Command of string
@@ -48,7 +58,6 @@ module Exiling =
     type private ExileMap = Map<uint64,string>
     module Impl =
         module Profiling =
-            open System
             let get,set =
                 Storage.createGetSet<ExileMap> "Exiling"
 
@@ -89,6 +98,7 @@ module Exiling =
         let getAuthorProfile (su:SocketUser) cp =
             (su.Username, findExileUser cp su.Username)
             |> onProfileSearch
+
     open Impl
     open System.Net.Sockets
 
@@ -107,11 +117,12 @@ module Exiling =
                         |> Async.AwaitTask
                         |> Async.Ignore
                     do!
-                        [sprintf "I am still a child, don't expect me to remember for long. I have a lot of growing to do."]
+                        [sprintf "I am growing, and I think I'll remmeber this, but I may forget."]
                         |> SocketMessage.reply sm
                         |> Async.AwaitTask
                         |> Async.Ignore
                 }
+                |> Async.Ignore
                 |> Async.StartAsTask
                 :> Task
                 |> Some
@@ -119,25 +130,29 @@ module Exiling =
                 (sm.Author.Username, findExileUser cp sm.Author.Username)
                 |> onProfileSearch
                 |> SocketMessage.reply sm
+                :> Task
                 |> Some
             | _ -> None
-
         )
+
     let getProfile =
-        "getProfile", 
+        "getProfile",
             Complex (fun cp sm ->
                 match sm.Content with
                 | After "getProfile " (UserName userName) ->
                     (userName,findExileUser cp userName)
                     |> onProfileSearch
                     |> SocketMessage.reply sm
+                    :> Task
                     |> Some
                 | RMatch "getProfile\s*$" _ ->
                     getAuthorProfile sm.Author cp
                     |> SocketMessage.reply sm
+                    :> Task
                     |> Some
                 | _ -> None
             )
+
 module Commandments =
     open System
 
@@ -151,6 +166,7 @@ module Commandments =
         ]
         |> List.map(fun (x,y) -> sprintf "!%s" x,y)
         |> Map.ofList
+
     let notSimpleReplies =
         [
             Exiling.getProfile
@@ -159,6 +175,7 @@ module Commandments =
         |> List.map(fun (x,y) -> sprintf "!%s" x,y)
         |> Map.ofList
     ()
+
     let (|Simpleton|NotSimpleton|UhOh|IgnoranceIsBliss|) (authorId,botUserId, content) =
         if authorId = botUserId || content |> String.IsNullOrWhiteSpace then
             IgnoranceIsBliss
