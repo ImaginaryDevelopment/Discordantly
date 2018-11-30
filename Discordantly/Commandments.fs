@@ -1,7 +1,10 @@
 ﻿namespace Discordantly
 
-open Discord.WebSocket
 open System.Threading.Tasks
+
+open Schema.Helpers
+
+open Discord.WebSocket
 open Discord
 
 // exposes only things the bot commands should have access to
@@ -21,7 +24,7 @@ module SocketMessage =
     open Discord.Rest
 
     type AsyncReplyWrapper = {RestUserMessage:Rest.RestUserMessage; DeleteMe:bool}
-    let reply' (sm:SocketMessage) (txt:string) :Task<_>=
+    let reply' (sm:SocketMessage) (txt:string):Task<_>=
         upcast sm.Channel.SendMessageAsync txt
     let reply(sm:SocketMessage) (txt:MessageType list) :Task<_> =
         let single x :Async<AsyncReplyWrapper list> =
@@ -94,21 +97,23 @@ module Exiling =
                     fSideEffect value
 
         module Profiling =
-            let get,set =
-                Storage.createGetSet<ExileMap> "Exiling"
 
-        let mutable profiles =
-            Profiling.get()
-            |> Option.defaultValue Map.empty
+            let profiles = 
+                let get,set =
+                    Storage.createGetSet<ExileMap> "Exiling"
+                let v =
+                    get()
+                    |> Option.defaultValue Map.empty
+                LikeAProperty(v, Some>>set)
 
-        let findExileUser (cp:ClientProxy) username =
-            profiles
-            |> Map.tryPick(fun uid profileName ->
-                let u = cp.GetUser uid
-                if u.Username = username then
-                    Some (u,profileName)
-                else None
-            )
+            let findExileUser (cp:ClientProxy) username =
+                profiles.Value
+                |> Map.tryPick(fun uid profileName ->
+                    let u = cp.GetUser uid
+                    if u.Username = username then
+                        Some (u,profileName)
+                    else None
+                )
         let onProfileSearch =
             function
                 | un, Some(_user,pn) ->
@@ -132,7 +137,7 @@ module Exiling =
                 Some userName
             | _ -> None
         let getAuthorProfile (su:SocketUser) cp =
-            (su.Username, findExileUser cp su.Username)
+            (su.Username, Profiling.findExileUser cp su.Username)
             |> onProfileSearch
 
     open Impl
@@ -143,8 +148,8 @@ module Exiling =
         "setProfile", Complex (fun cp sm ->
             match sm.Content with
             | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
-                profiles <-
-                    profiles
+                Impl.Profiling.profiles.Value <-
+                    Impl.Profiling.profiles.Value
                     |> Map.add sm.Author.Id profileName
                 async {
                     do!
@@ -163,7 +168,7 @@ module Exiling =
                 :> Task
                 |> Some
             | RMatch "setProfile$" _ ->
-                (sm.Author.Username, findExileUser cp sm.Author.Username)
+                (sm.Author.Username, Impl.Profiling.findExileUser cp sm.Author.Username)
                 |> onProfileSearch
                 |> SocketMessage.reply sm
                 :> Task
@@ -176,7 +181,7 @@ module Exiling =
             Complex (fun cp sm ->
                 match sm.Content with
                 | After "getProfile " (UserName userName) ->
-                    (userName,findExileUser cp userName)
+                    (userName,Impl.Profiling.findExileUser cp userName)
                     |> onProfileSearch
                     |> SocketMessage.reply sm
                     :> Task

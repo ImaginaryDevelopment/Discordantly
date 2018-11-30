@@ -16,8 +16,14 @@ let readyAsync():Task =
     printfn "Ready!"
     Task.CompletedTask
 
+let printMessgMeta (sm:SocketMessage) =
+    // hey look at Discord.net's horrible you need to cast something to check if it has properties. No SOLID here, un uh.
+    match sm.Channel with
+    | :? SocketGuildChannel as sgc ->
+        printfn "Msg! %s:%s:%A:%s" sgc.Guild.Name sm.Channel.Name sm.Source sm.Author.Username
+    | _ ->
+        printfn "Msg! %A:%s:%s" sm.Source sm.Channel.Name sm.Author.Username
 let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
-    printfn "Msg! %A" sm.Source
     let notFound = "Dude, where's my response dude?"
     if sm.Channel.Name.Contains("bot") = false then
         if sm.Content.StartsWith "!" then
@@ -29,6 +35,7 @@ let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
             let client = fClient()
             match (sm.Author.Id, client.CurrentUser.Id,sm.Content) with
             | IgnoranceIsBliss ->
+                printMessgMeta sm
                 ()
             | Simpleton txt ->
                 send txt

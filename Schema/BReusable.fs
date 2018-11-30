@@ -1,20 +1,26 @@
-﻿[<AutoOpen>]
-module Helpers
+[<AutoOpen>]
+module Schema.Helpers
+
 open System
+
+let after (delim:string) (x:string) =
+    match delim,x with
+    | null,_|"",_ -> invalidOp "bad delimiter"
+    | _, null | _, "" -> None
+    | _ ->
+        let i = x.IndexOf delim
+        if i >= 0 then
+            Some (x.[i+delim.Length..])
+        else None
+let (|After|_|) = after
+let (|Token|_|) (delim:string) (x:string) =
+    if x.IndexOf delim = 0 then
+        x |> after delim
+    else None
 let isValueString = String.IsNullOrWhiteSpace >> not
 let (|ValueString|NonValueString|) x =
     if isValueString x then ValueString x
     else NonValueString
-
-let afterOpt (delimiter:string) (x:string) =
-    match x.IndexOf delimiter with
-    | z when z < 0 -> None
-    | i -> Some x.[i + delimiter.Length  ..]
-let after (delimiter:string) (x:string) =
-    match afterOpt delimiter x with
-    | None -> invalidOp <| sprintf "'%s' does not contain '%s'" x delimiter
-    | Some x -> x
-let (|After|_|) (delimiter:string) = afterOpt delimiter
 
 let (|StartsWith|_|) (delimiter:string) =
     if String.IsNullOrEmpty delimiter then invalidOp "Starts with does not accept a null or empty string"
@@ -77,7 +83,6 @@ module Storage =
     open System
     open System.IO
     open SuperSerial
-    open Discord.WebSocket
 
     let private folderPath = IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Discordantly")
     let private getKeyPath key = Path.Combine(folderPath,sprintf "%s.json" key)

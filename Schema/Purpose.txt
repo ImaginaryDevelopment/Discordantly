@@ -1,0 +1,1 @@
+﻿Hold the shapes needed in common between projects which don't have any external dependencies besides the default (and maybe newtonsoft)
