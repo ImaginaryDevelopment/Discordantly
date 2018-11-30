@@ -2,6 +2,8 @@
 
 open System
 open System.Collections.Generic
+open Newtonsoft.Json.Linq
+open Schema.Helpers
 
 type NodeType =
     |Normal
@@ -44,4 +46,52 @@ and SkillNode () = // https://github.com/PoESkillTree/PoESkillTree/blob/f4a6119b
 
 
 
+// based on the javascript object the poe official tree viewer/planner returns
+//require(['main'], function() {
+//        require(['skilltree'], function (PassiveSkillTree) {
+//            var passiveSkillTreeData = ...
+module PassiveJsParsing =
+    type Node = {
+            g:int
+            m:bool
+            o:int
+            da:int
+            dn:string
+            ia:int
+            id:int
+            ``in``:int list
+            ks:bool
+            sa:int
+            sd:string list
+            ``not``:bool
+            ``out``:int list
+            spc: int list
+            icon:string
+            oidx:int
+            isJewelSocket:bool
+            ascendancyName:string
+            isMultipleChoice:bool
+            isAscendancyStart:bool
+            passivePointsGranted:int
+            isMultipleChoiceOption:bool
+    }
+    type PassiveLookup = {
+            root:JObject
+            max_x:int
+            max_y:int
+            min_x:int
+            min_y:int
+            nodes:Dictionary<int,Node>
+            groups:JObject
+            extraImages:JObject
+            characterData:JArray
+            // don't want this one for now at least
+            //assets:obj
+            constants:JObject
+    }
+    // by hand??? =(
+    let getMappedNodes folderPath =
+        IO.Path.Combine(folderPath,"Passives.json")
+        |> IO.File.ReadAllText
+        |> SuperSerial.deserialize<PassiveLookup>
 

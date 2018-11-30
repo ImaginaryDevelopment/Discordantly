@@ -5,9 +5,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Passives.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Compile Include="TreeParsing.fs" />
     <Compile Include="Classes.fs" />
   </ItemGroup>
+
+  <ItemGroup />
 
   <ItemGroup>
     <ProjectReference Include="..\Schema\Schema.fsproj" />
