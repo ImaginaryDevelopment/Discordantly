@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PathOfExile.Domain\PathOfExile.Domain.fsproj" />
     <ProjectReference Include="..\Schema\Schema.fsproj" />
   </ItemGroup>
 

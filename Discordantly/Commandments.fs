@@ -142,6 +142,7 @@ module Exiling =
 
     open Impl
     open System.Net.Sockets
+    open PathOfExile.Domain.TreeParsing.PassiveJsParsing
 
 
     let setProfile =
@@ -193,6 +194,31 @@ module Exiling =
                     |> Some
                 | _ -> None
             )
+    let getClass =
+        "getClass",
+            Complex (fun cp sm ->
+                match sm.Content with
+                | After "getClass " uri ->
+                    Impl.regIt uri
+                    |> Option.bind (fun _ ->
+                            match nodeCache with
+                            | Some nc -> Some nc
+                            | None ->
+                                match Impl.getMappedNodes(System.Environment.CurrentDirectory) with
+                                | Some nc ->
+                                    nodeCache <- Some nc
+                                    Some nc
+                                | None -> None
+                    )
+                    |> Option.bind(fun nc -> decodeUrl nc.nodes uri)
+                    |> Option.bind(fun tree -> tree.Class)
+                    |> Option.map(fun x ->
+                        SocketMessage.reply' sm <| sprintf "%A" x
+                        :> Task
+                    )
+
+                | _ -> None
+            )
 
 module Commandments =
     open System
@@ -212,6 +238,7 @@ module Commandments =
         [
             Exiling.getProfile
             Exiling.setProfile
+            Exiling.getClass
         ]
         |> List.map(fun (x,y) -> sprintf "!%s" x,y)
         |> Map.ofList

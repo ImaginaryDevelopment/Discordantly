@@ -8,8 +8,8 @@
     <Content Include="Passives.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Compile Include="TreeParsing.fs" />
     <Compile Include="Classes.fs" />
+    <Compile Include="TreeParsing.fs" />
   </ItemGroup>
 
   <ItemGroup />

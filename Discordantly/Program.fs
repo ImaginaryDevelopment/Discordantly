@@ -23,6 +23,7 @@ let printMessgMeta (sm:SocketMessage) =
         printfn "Msg! %s:%s:%A:%s" sgc.Guild.Name sm.Channel.Name sm.Source sm.Author.Username
     | _ ->
         printfn "Msg! %A:%s:%s" sm.Source sm.Channel.Name sm.Author.Username
+
 let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
     let notFound = "Dude, where's my response dude?"
     if sm.Channel.Name.Contains("bot") = false then
