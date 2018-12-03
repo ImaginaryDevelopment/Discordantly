@@ -16,6 +16,7 @@ module Classes =
     type WitchType =
         | Occulist
         | Elementalist
+        | Necromancer
 
     type ChClass =
         |Marauder of MarauderType option

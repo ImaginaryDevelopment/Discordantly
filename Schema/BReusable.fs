@@ -12,7 +12,17 @@ let after (delim:string) (x:string) =
         if i >= 0 then
             Some (x.[i+delim.Length..])
         else None
+let before (delim:string) (x:string) =
+    match delim,x with
+    | null,_|"",_ -> invalidOp "bad delimiter"
+    | _, null | _, "" -> None
+    | _ ->
+        let i = x.IndexOf delim
+        if i >= 0 then
+            Some (x.[0..i])
+        else None
 let (|After|_|) = after
+let (|Before|_|) = before
 let (|Token|_|) (delim:string) (x:string) =
     if x.IndexOf delim = 0 then
         x |> after delim
@@ -78,6 +88,8 @@ module SuperSerial =
 type Microsoft.FSharp.Control.AsyncBuilder with
     member x.Bind(t:System.Threading.Tasks.Task<'t>, f:'t -> Async<'r>) : Async<'r> =
         x.Bind(Async.AwaitTask t,f)
+    //member x.Bind(t:System.Threading.Tasks.Task, f: unit -> Async<unit>): Async<unit> =
+    //    x.Bind(Async.AwaitTask t,f)
 
 module Storage =
     open System

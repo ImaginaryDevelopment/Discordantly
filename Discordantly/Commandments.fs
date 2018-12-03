@@ -20,10 +20,19 @@ type ClientProxy(client:DiscordSocketClient) =
 type MessageType =
     | Keepsies of string
     | Deletesies of string
+
 module SocketMessage =
     open Discord.Rest
+    open Schema.Helpers
 
     type AsyncReplyWrapper = {RestUserMessage:Rest.RestUserMessage; DeleteMe:bool}
+    let deleteAndReply (sm:SocketMessage) (txt:string):Task<_> =
+        async{
+            do! Async.AwaitTask(sm.DeleteAsync())
+            return sm.Channel.SendMessageAsync(txt)
+        }
+        |> Async.StartAsTask
+
     let reply' (sm:SocketMessage) (txt:string):Task<_>=
         upcast sm.Channel.SendMessageAsync txt
     let reply(sm:SocketMessage) (txt:MessageType list) :Task<_> =
@@ -84,6 +93,8 @@ type TriggerType =
     | Method of beginsWith:string
 
 type Command = {Trigger:string;ReplyType:ReplyType}
+type NotSimple = {TriggerHelp:string list;F:ReplyType}
+
 // profile tracking, etc
 module Exiling =
     open Regex
@@ -146,61 +157,76 @@ module Exiling =
     open PathOfExile.Domain.TreeParsing.PassiveJsParsing
 
 
-    let setProfile =
-        "setProfile", "setProfile [account name] (for example: DevelopersDevelopersDevelopers)", Complex (fun cp sm ->
-            match sm.Content with
-            | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
-                Impl.Profiling.profiles.Value <-
-                    Impl.Profiling.profiles.Value
-                    |> Map.add sm.Author.Id profileName
-                async {
-                    do!
-                        [Keepsies <| sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName]
-                        |> SocketMessage.reply sm
-                        |> Async.AwaitTask
-                        |> Async.Ignore
-                    do!
-                        [Keepsies <| sprintf "I am growing, and I think I'll remember this, but I may forget."]
-                        |> SocketMessage.reply sm
-                        |> Async.AwaitTask
-                        |> Async.Ignore
-                }
-                |> Async.Ignore
-                |> Async.StartAsTask
-                :> Task
-                |> Some
-            | RMatch "setProfile$" _ ->
-                (sm.Author.Username, Impl.Profiling.findExileUser cp sm.Author.Username)
-                |> onProfileSearch
-                |> SocketMessage.reply sm
-                :> Task
-                |> Some
-            | _ -> None
-        )
-
-    let getProfile =
-        "getProfile", "getProfile [UserName]",
-            Complex (fun cp sm ->
+    let setProfile:string*NotSimple =
+        "setProfile",
+        {
+            TriggerHelp=["setProfile [account name] (for example: DevelopersDevelopersDevelopers)"]
+            F= Complex (fun cp sm ->
                 match sm.Content with
-                | After "getProfile " (UserName userName) ->
-                    (userName,Impl.Profiling.findExileUser cp userName)
+                | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
+                    Impl.Profiling.profiles.Value <-
+                        Impl.Profiling.profiles.Value
+                        |> Map.add sm.Author.Id profileName
+                    async {
+                        do!
+                            [Keepsies <| sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName]
+                            |> SocketMessage.reply sm
+                            |> Async.AwaitTask
+                            |> Async.Ignore
+                        do!
+                            [Keepsies <| sprintf "I am growing, and I think I'll remember this, but I may forget."]
+                            |> SocketMessage.reply sm
+                            |> Async.AwaitTask
+                            |> Async.Ignore
+                    }
+                    |> Async.Ignore
+                    |> Async.StartAsTask
+                    :> Task
+                    |> Some
+                | RMatch "setProfile$" _ ->
+                    (sm.Author.Username, Impl.Profiling.findExileUser cp sm.Author.Username)
                     |> onProfileSearch
                     |> SocketMessage.reply sm
                     :> Task
                     |> Some
-                | RMatch "getProfile\s*$" _ ->
-                    getAuthorProfile sm.Author cp
-                    |> SocketMessage.reply sm
-                    :> Task
-                    |> Some
                 | _ -> None
-            )
+        )
+    }
+
+    let getProfile:string*NotSimple=
+        "getProfile",
+        {
+            TriggerHelp=["alone it will get your own";"or specify a username to another user's profile if they have one"]
+            F=
+                Complex (fun cp sm ->
+                    match sm.Content with
+                    | After "getProfile " (UserName userName) ->
+                        (userName,Impl.Profiling.findExileUser cp userName)
+                        |> onProfileSearch
+                        |> SocketMessage.reply sm
+                        :> Task
+                        |> Some
+                    | RMatch "getProfile\s*$" _ ->
+                        getAuthorProfile sm.Author cp
+                        |> SocketMessage.reply sm
+                        :> Task
+                        |> Some
+                    | _ -> None
+                )
+        }
+    //type NotSimple<'t> = {Trigger:string;TriggerHelp:string list;F:'t}
+        //"getProfile", {SimpleTrigger="getProfile [UserName]";TriggerHelp=;F=f}
     let getClass =
-        "getClass", "getClass [PassiveTreeLink] (for example: `https://www.pathofexile.com/fullscreen-passive-skill-tree/3.4.5/AAAABAMAAQ==`)",
-            Complex (fun cp sm ->
+        "getClass",
+        {
+            TriggerHelp=["getClass [PassiveTreeLink] (for example: `` `https://www.pathofexile.com/fullscreen-passive-skill-tree/3.4.5/AAAABAMAAQ==`\r\n``)"]
+            F= Complex (fun cp sm ->
                 match sm.Content with
-                | After "getClass " uri ->
-                    Impl.regIt uri
+                | After "getClass <" (Before ">" uri)
+                | After "getClass `" (Before "`" uri)->
+                    let reggie = Impl.regIt uri
+                    printfn "Found uri, worked?%A, he's:%s" reggie.IsSome uri
+                    reggie
                     |> Option.bind (fun _ ->
                             match nodeCache with
                             | Some nc -> Some nc
@@ -213,63 +239,75 @@ module Exiling =
                     )
                     |> Option.bind(fun nc -> decodeUrl nc.nodes uri)
                     |> Option.bind(fun tree -> tree.Class)
-                    |> Option.map(fun x ->
-                        SocketMessage.reply' sm <| sprintf "%A" x
-                        :> Task
+                    |> Option.map(
+                        function
+                        | Choice1Of2 x ->
+                            SocketMessage.reply' sm <| sprintf "%A" x
+                            :> Task
+                        | Choice2Of2 msg ->
+                            SocketMessage.reply' sm <| msg
+                            :> Task
                     )
-
+                | After "getClass " _ ->
+                    sprintf "@%s !getClass uri must be surrounded by <> or `" sm.Author.Username
+                    |> SocketMessage.deleteAndReply sm 
+                    :> Task
+                    |> Some
                 | _ -> None
             )
+    }
 
 module Commandments =
     open System
 
     let simpleReplies =
         [
-         "ping","pong!"
-         "play","would you like to play a game?"
-         "poelink","https://jsfiddle.net/Maslow/e02ts1jy/show"
-         "language","I'm always down to F#, do you speak my language? I hope you aren't a dirty C#er"
-         "src", "https://github.com/ImaginaryDevelopment/Discordantly"
+            "ping","pong!"
+            "play","would you like to play a game?"
+            "poelink","https://jsfiddle.net/Maslow/e02ts1jy/show"
+            "language","I'm always down to F#, do you speak my language? I hope you aren't a dirty C#er"
+            "src", "https://github.com/ImaginaryDevelopment/Discordantly"
         ]
         |> List.map(fun (x,y) -> sprintf "!%s" x,y)
-        |> Map.ofList 
+        |> Map.ofList
 
-    let notSimpleReplies =
+    let notSimpleReplies : Map<string, NotSimple>=
         [
             Exiling.getProfile
             Exiling.setProfile
             Exiling.getClass
         ]
-        |> List.map(fun (x,h,y) -> sprintf "!%s" x, (sprintf "!%s" h,y))
+        |> List.map(fun (x,c) ->  sprintf "!%s" x, c)
         |> Map.ofList
     ()
 
     let help =
         let s = simpleReplies |> Map.toSeq |> Seq.map fst |> List.ofSeq
-        let ns = notSimpleReplies |> Map.toSeq |> Seq.map snd |> Seq.map fst |> List.ofSeq
+        let ns = notSimpleReplies |> Map.toSeq |> Seq.map fst |> List.ofSeq
         let items =
             ("  -",s@ns)
             ||> List.fold(fun text line ->
                 sprintf "%s\r\n  %s" text line
             )
         ["command list:";items]
-        |> Multiple
+        //|> Multiple
 
+    // dispatch ( take in the author id, bot id, full message text
     let (|Simpleton|NotSimpleton|UhOh|IgnoranceIsBliss|) (authorId,botUserId, content) =
+        let ns (cmd:string,help:string list, f) = NotSimpleton (cmd,help,f)
         if authorId = botUserId || content |> String.IsNullOrWhiteSpace then
             IgnoranceIsBliss
         elif simpleReplies.ContainsKey content then
-            Simpleton simpleReplies.[content]
+            Simpleton [simpleReplies.[content]]
         elif content = "!help" then
-            let result : ReplyType = help
-            NotSimpleton ("!help",result)
+            //let result : ReplyType = help
+            Simpleton help
         else
             notSimpleReplies
             |> Map.tryFindKey(fun k _ -> content.StartsWith k)
             |> function
-                | Some x -> NotSimpleton (x,snd notSimpleReplies.[x])
-                | None -> 
+                | Some x -> ns (x,notSimpleReplies.[x].TriggerHelp,notSimpleReplies.[x].F)
+                | None ->
                     if content.StartsWith "!" then
                         UhOh
                     else IgnoranceIsBliss

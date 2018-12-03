@@ -2,6 +2,8 @@
 
 open System
 open System.Threading.Tasks
+
+open Schema.Helpers
 open Discord.WebSocket
 open Discord
 
@@ -24,33 +26,47 @@ let printMessgMeta (sm:SocketMessage) =
     | _ ->
         printfn "Msg! %A:%s:%s" sm.Source sm.Channel.Name sm.Author.Username
 
+// check for a command, react if found, suggest if arguments are not right
 let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
     let notFound = "Dude, where's my response dude?"
+    // if this isn't an appropriate channel for a bot, ignore it
     if sm.Channel.Name.Contains("bot") = false then
         if sm.Content.StartsWith "!" then
             printfn "ignoring a command from %s(%s)" sm.Channel.Name sm.Author.Username
         Task.CompletedTask
     else
         async{
-            let send = sm.Channel.SendMessageAsync >> ignore
+            let send msgs =
+                async{
+                    for x in msgs do
+                        let! _ = sm.Channel.SendMessageAsync(x)
+                        ()
+
+                }
+                |> Async.Start
+                |> ignore
+                //sm.Channel.SendMessageAsync >> ignore
             let client = fClient()
             match (sm.Author.Id, client.CurrentUser.Id,sm.Content) with
             | IgnoranceIsBliss ->
                 printMessgMeta sm
                 ()
-            | Simpleton txt ->
-                send txt
-            | NotSimpleton (cmdName, Complex f) ->
+            | Simpleton lines ->
+                send lines
+            | NotSimpleton (cmdName, help, Complex f) ->
                 match f (ClientProxy client) sm with
                 | Some r -> r |> ignore<Task>
-                | None -> send <| sprintf "Could not understand command arguments for %s" cmdName
-            | NotSimpleton (_cmdName, Multiple lines) ->
+                | None ->
+                    sprintf "Could not understand command arguments for `%s`" cmdName::help
+                    |> send
+
+            | NotSimpleton (_cmdName, _help, Multiple lines) ->
                 SocketMessage.reply sm (lines |> List.map MessageType.Keepsies)
                 |> ignore
-            | NotSimpleton (cmdName, _) ->
-                send <| sprintf "Tell my creator he needs to learn how to code better"
+            | NotSimpleton (_cmdName, _, _) ->
+                send ["Tell my creator he needs to learn how to code better"]
             | UhOh ->
-                send notFound
+                send [notFound]
         }
         |> Async.StartAsTask
         :> Task
