@@ -239,13 +239,9 @@ module Exiling =
                     )
                     |> Option.bind(fun nc -> decodeUrl nc.nodes uri)
                     |> Option.bind(fun tree -> tree.Class)
-                    |> Option.map(
-                        function
-                        | Choice1Of2 x ->
-                            SocketMessage.reply' sm <| sprintf "%A" x
-                            :> Task
-                        | Choice2Of2 msg ->
-                            SocketMessage.reply' sm <| msg
+                    |> Option.map(fun x ->
+                            let display = x.ToString()
+                            SocketMessage.reply' sm <| display
                             :> Task
                     )
                 | After "getClass " _ ->

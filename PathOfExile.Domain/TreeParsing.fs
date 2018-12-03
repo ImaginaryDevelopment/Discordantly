@@ -135,7 +135,7 @@ module PassiveJsParsing =
     open Impl
     open PathOfExile.Domain.Classes
     let mutable nodeCache : PassiveLookup option= None
-    type Tree = {Version:int; Class:Choice<ChClass,string> option;Nodes:Node list}
+    type Tree = {Version:int; Class:ChClass option;Nodes:Node list}
     let decodeUrl (nodes:IDictionary<int,Node>) url =
         url
         |> regIt
@@ -148,14 +148,10 @@ module PassiveJsParsing =
                     Version=x.Version
                     Class=
                         match x.CharClass,x.Ascendency with
-                        | 3,0 -> Some <| Choice1Of2 (Witch None)
-                        | 3,1 -> Some <| Choice1Of2 (Witch <| Some Occulist)
-                        | 4,0 -> Some <| Choice1Of2 (Duelist None)
+                        | IsClass x -> Some x
                         | (cls,asc) ->
                             printfn "No class/asc setup for %A" (cls,asc)
-                            sprintf "Class/asc not setup for %i/%i" cls asc
-                            |> Choice2Of2
-                            |> Some
+                            None
                     Nodes= x.Nodes |> List.map(fun n -> nodes.[n])
                 }
         )
