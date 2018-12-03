@@ -76,6 +76,7 @@ module SocketMessage =
 [<NoEquality;NoComparison>]
 type ReplyType =
     | Simple of string
+    | Multiple of string list
     //| Complex of (ClientProxy -> SocketMessage -> Task<Rest.RestUserMessage list> option)
     | Complex of (ClientProxy -> SocketMessage -> Task option)
 type TriggerType =
@@ -146,7 +147,7 @@ module Exiling =
 
 
     let setProfile =
-        "setProfile", Complex (fun cp sm ->
+        "setProfile", "setProfile [account name] (for example: DevelopersDevelopersDevelopers)", Complex (fun cp sm ->
             match sm.Content with
             | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
                 Impl.Profiling.profiles.Value <-
@@ -178,7 +179,7 @@ module Exiling =
         )
 
     let getProfile =
-        "getProfile",
+        "getProfile", "getProfile [UserName]",
             Complex (fun cp sm ->
                 match sm.Content with
                 | After "getProfile " (UserName userName) ->
@@ -195,7 +196,7 @@ module Exiling =
                 | _ -> None
             )
     let getClass =
-        "getClass",
+        "getClass", "getClass [PassiveTreeLink] (for example: `https://www.pathofexile.com/fullscreen-passive-skill-tree/3.4.5/AAAABAMAAQ==`)",
             Complex (fun cp sm ->
                 match sm.Content with
                 | After "getClass " uri ->
@@ -232,7 +233,7 @@ module Commandments =
          "src", "https://github.com/ImaginaryDevelopment/Discordantly"
         ]
         |> List.map(fun (x,y) -> sprintf "!%s" x,y)
-        |> Map.ofList
+        |> Map.ofList 
 
     let notSimpleReplies =
         [
@@ -240,20 +241,34 @@ module Commandments =
             Exiling.setProfile
             Exiling.getClass
         ]
-        |> List.map(fun (x,y) -> sprintf "!%s" x,y)
+        |> List.map(fun (x,h,y) -> sprintf "!%s" x, (sprintf "!%s" h,y))
         |> Map.ofList
     ()
+
+    let help =
+        let s = simpleReplies |> Map.toSeq |> Seq.map fst |> List.ofSeq
+        let ns = notSimpleReplies |> Map.toSeq |> Seq.map snd |> Seq.map fst |> List.ofSeq
+        let items =
+            ("  -",s@ns)
+            ||> List.fold(fun text line ->
+                sprintf "%s\r\n  %s" text line
+            )
+        ["command list:";items]
+        |> Multiple
 
     let (|Simpleton|NotSimpleton|UhOh|IgnoranceIsBliss|) (authorId,botUserId, content) =
         if authorId = botUserId || content |> String.IsNullOrWhiteSpace then
             IgnoranceIsBliss
         elif simpleReplies.ContainsKey content then
             Simpleton simpleReplies.[content]
+        elif content = "!help" then
+            let result : ReplyType = help
+            NotSimpleton ("!help",result)
         else
             notSimpleReplies
             |> Map.tryFindKey(fun k _ -> content.StartsWith k)
             |> function
-                | Some x -> NotSimpleton (x,notSimpleReplies.[x])
+                | Some x -> NotSimpleton (x,snd notSimpleReplies.[x])
                 | None -> 
                     if content.StartsWith "!" then
                         UhOh

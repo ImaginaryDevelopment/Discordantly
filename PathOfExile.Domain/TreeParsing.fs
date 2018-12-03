@@ -96,6 +96,7 @@ module PassiveJsParsing =
             IO.Path.Combine(folderPath,"Passives.json")
             |> IO.File.ReadAllText
             |> SuperSerial.deserialize<PassiveLookup>
+
         let decodebase64Url (x:string) =
             let partial =
                 x

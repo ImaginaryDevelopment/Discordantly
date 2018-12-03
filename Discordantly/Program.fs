@@ -44,6 +44,9 @@ let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
                 match f (ClientProxy client) sm with
                 | Some r -> r |> ignore<Task>
                 | None -> send <| sprintf "Could not understand command arguments for %s" cmdName
+            | NotSimpleton (_cmdName, Multiple lines) ->
+                SocketMessage.reply sm (lines |> List.map MessageType.Keepsies)
+                |> ignore
             | NotSimpleton (cmdName, _) ->
                 send <| sprintf "Tell my creator he needs to learn how to code better"
             | UhOh ->
