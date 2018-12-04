@@ -95,6 +95,35 @@ type TriggerType =
 type Command = {Trigger:string;ReplyType:ReplyType}
 type NotSimple = {TriggerHelp:string list;F:ReplyType}
 
+module Generalities =
+    open System.Collections.Generic
+
+    let cleaning:string*NotSimple =
+        "maidservice",
+        {   TriggerHelp=["Maid Service, you want hot towel?"]
+            F= Complex (fun cp sm ->
+                match sm.Content with 
+                | EndsWith "maidservice" ->
+                    printfn "Cleaning up msgs"
+                    let msgs = sm.Channel.GetMessagesAsync 40
+                    let a =
+                        async{
+                            let! msgs = msgs
+                            for sm in msgs do
+                                printfn "Checking a message"
+                                if sm.Author.Id = cp.CurrentUser.Id || sm.Content.StartsWith "!" then
+                                    printfn "imma delete this one"
+                                    sm.DeleteAsync() |> ignore
+                                    do! Async.Sleep 800
+                                    printfn "I finished one?"
+                        }
+                    //sm.Channel.CachedMessages
+                    Async.StartAsTask a
+                    :> Task
+                    |> Some
+                | _ -> None
+            )
+        }
 // profile tracking, etc
 module Exiling =
     open Regex
@@ -272,6 +301,7 @@ module Commandments =
             Exiling.getProfile
             Exiling.setProfile
             Exiling.getClass
+            Generalities.cleaning
         ]
         |> List.map(fun (x,c) ->  sprintf "!%s" x, c)
         |> Map.ofList

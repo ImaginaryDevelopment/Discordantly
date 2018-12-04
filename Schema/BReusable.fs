@@ -7,54 +7,73 @@ let (|UnsafeNull|_|) x =
     if isNull <| box x then Some()
     else None
 
-let after (delim:string) (x:string) =
-    match delim,x with
-    | null,_|"",_ -> invalidOp "bad delimiter"
-    | _, null | _, "" -> None
-    | _ ->
+let prepareForDelimiting (delim:string) (x:string) =
+    if String.IsNullOrWhiteSpace delim then
+        invalidOp "bad delimiter"
+    if String.IsNullOrWhiteSpace x then
+        None
+    else Some x
+
+let after delim =
+    prepareForDelimiting delim
+    >> Option.bind(fun x ->
         let i = x.IndexOf delim
         if i >= 0 then
             Some (x.[i+delim.Length..])
         else None
-let before (delim:string) (x:string) =
-    match delim,x with
-    | null,_|"",_ -> invalidOp "bad delimiter"
-    | _, null | _, "" -> None
-    | _ ->
+    )
+
+let before delim =
+    prepareForDelimiting delim
+    >> Option.bind(fun x ->
         let i = x.IndexOf delim
         if i >= 0 then
             Some (x.[0..i])
         else None
+    )
 let (|After|_|) = after
+let (|EndsWith|_|) delim =
+    prepareForDelimiting delim
+    >> Option.bind(fun x ->
+        if x.EndsWith delim then Some() else None
+    )
 let (|Before|_|) = before
-let (|Token|_|) (delim:string) (x:string) =
-    if x.IndexOf delim = 0 then
-        x |> after delim
-    else None
+let (|Token|_|) delim =
+    prepareForDelimiting delim
+    >> Option.bind(fun x ->
+       if x.IndexOf delim = 0 then
+            x |> after delim
+        else None
+    )
 let isValueString = String.IsNullOrWhiteSpace >> not
 let (|ValueString|NonValueString|) x =
     if isValueString x then ValueString x
     else NonValueString
 
-let (|StartsWith|_|) (delimiter:string) =
-    if String.IsNullOrEmpty delimiter then invalidOp "Starts with does not accept a null or empty string"
-    function
-    | null | "" -> None
-    | x when x.StartsWith delimiter ->
+let (|StartsWith|_|) delim =
+    prepareForDelimiting delim
+    >> Option.bind(fun x ->
+        if x.StartsWith delim then
             Some x
-    | _ -> None
+        else None
+    )
 let (|Trim|) =
     function
     | null |"" as x -> x
     | x -> x.Trim()
 
 open System.Text.RegularExpressions
+open System.Collections.Generic
 
 module Regex =
-    let (|RMatch|_|) (pattern:string) x =
-        let m = Regex.Match(x,pattern=pattern)
-        if m.Success then Some m
-        else None
+    let (|RMatch|_|) (pattern:string) =
+        prepareForDelimiting pattern
+        >> Option.bind(fun x ->
+            let m = Regex.Match(x,pattern=pattern)
+            if m.Success then Some m
+            else None
+        )
+
     let (|RMatchGroup|_|) (pattern:string) (i:int) =
         function
         | RMatch pattern m ->
@@ -64,7 +83,25 @@ module Regex =
                 Some m.Groups.[i].Value
         | _ -> None
 
+open System.Linq
+// http://www.fssnip.net/hv/title/Extending-async-with-await-on-tasks
+type Microsoft.FSharp.Control.AsyncBuilder with
+    member x.Bind(t:System.Threading.Tasks.Task<'t>, f:'t -> Async<'r>) : Async<'r> =
+        x.Bind(Async.AwaitTask t,f)
+    member x.Bind(t:System.Threading.Tasks.Task, f:unit -> Async<unit>) : Async<unit> =
+        x.Bind(Async.AwaitTask t,f)
+    member x.Bind(e:IAsyncEnumerable<IEnumerable<'t>>,f) =
+        let t = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ToArray()
+        x.Bind(t,f)
+    member x.Bind(e:IAsyncEnumerable<IReadOnlyCollection<'t>>,f) =
+        let t = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ToArray()
+        x.Bind(t,f)
+
+    //member __.For(e:IAsyncEnumerable<IEnumerable<'t>>,f) = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ForEachAsync(Action<_>(f))
+    member __.For(e:IAsyncEnumerable<IReadOnlyCollection<'t>>,f) = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ForEach(Action<_>(f))
 module Async =
+    open System.Collections.Generic
+    open System.Linq
     let map f x =
         async{
             let! x = x
@@ -88,12 +125,6 @@ module SuperSerial =
             System.Diagnostics.Trace.WriteLine(sprintf "Error deserialization failed:%s" ex.Message)
             None
 
-// http://www.fssnip.net/hv/title/Extending-async-with-await-on-tasks
-type Microsoft.FSharp.Control.AsyncBuilder with
-    member x.Bind(t:System.Threading.Tasks.Task<'t>, f:'t -> Async<'r>) : Async<'r> =
-        x.Bind(Async.AwaitTask t,f)
-    //member x.Bind(t:System.Threading.Tasks.Task, f: unit -> Async<unit>): Async<unit> =
-    //    x.Bind(Async.AwaitTask t,f)
 
 module Storage =
     open System
@@ -174,4 +205,3 @@ module Reflection =
                 
                 
         fIt x
- 
