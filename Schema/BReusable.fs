@@ -3,6 +3,10 @@ module Schema.Helpers
 
 open System
 
+let (|UnsafeNull|_|) x =
+    if isNull <| box x then Some()
+    else None
+
 let after (delim:string) (x:string) =
     match delim,x with
     | null,_|"",_ -> invalidOp "bad delimiter"
@@ -128,6 +132,46 @@ module Storage =
         getter, setter
 
 
+module Reflection =
+    open Microsoft.FSharp.Reflection
 
+    // we'd like to test if it is a union, but... no clue how
+    let getUnionInfo =
+        function
+        | UnsafeNull -> None
+        | x ->
+            printf "Checking a value for unionized labor"
+            let t = x.GetType()
+            try
+                let uInfo,fv = FSharpValue.GetUnionFields(x,t)
+                Some (t,uInfo,fv)
+            with _ -> None
+    let (|Option|_|) (caseInfo:UnionCaseInfo)=
+        if caseInfo.Name = "Some" && caseInfo.DeclaringType.IsClass && caseInfo.DeclaringType.IsGenericType then
+            if caseInfo.DeclaringType.GetGenericTypeDefinition() = typedefof<Option<_>> then
+                Some ()
+            else None
+        else None
 
-        
+    // Print/display options as 't instead of 't option
+    let fDisplay (x:'t) :string =
+        let rec fIt x =
+            match x with
+            | UnsafeNull -> sprintf "%A" x // using whatever is built-in to display null
+            | x ->
+                getUnionInfo x
+                |> Option.map(
+                    function
+                    | _,uInfo, [| |] -> uInfo.Name
+                    // scrape out "Some" from Option displays
+                    | _, Option, [| x |] -> fIt x
+                    | t, Option, values -> values |> Array.map fIt |> sprintf "%A"
+                    | t,uInfo,[| x |] ->
+                        sprintf "%s(%s)" uInfo.Name <| fIt x
+                    | (t,uInfo,fieldValues) ->
+                        sprintf "%A %A" uInfo.Name (fieldValues |> Array.map fIt)
+                ) |> Option.defaultValue (sprintf "%A" x)
+                
+                
+        fIt x
+ 

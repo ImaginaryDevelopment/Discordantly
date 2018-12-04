@@ -240,7 +240,7 @@ module Exiling =
                     |> Option.bind(fun nc -> decodeUrl nc.nodes uri)
                     |> Option.bind(fun tree -> tree.Class)
                     |> Option.map(fun x ->
-                            let display = x.ToString()
+                            let display = Reflection.fDisplay x
                             SocketMessage.reply' sm <| display
                             :> Task
                     )
