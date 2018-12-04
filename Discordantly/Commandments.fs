@@ -243,8 +243,65 @@ module Exiling =
                     | _ -> None
                 )
         }
-    //type NotSimple<'t> = {Trigger:string;TriggerHelp:string list;F:'t}
-        //"getProfile", {SimpleTrigger="getProfile [UserName]";TriggerHelp=;F=f}
+    let getMappedNodes directory =
+        match Impl.getMappedNodes directory with
+        | Some nc ->
+            nodeCache <- Some nc
+            Some nc
+        | None -> None
+    let getStat =
+        "getStat",
+        {
+            TriggerHelp=["getStat '[stat]' (PassiveTreeLink)"; "stats:"; "  Spell Damage";"  Life"]
+            F= Complex(fun cp sm ->
+                match sm.Content with
+                | NonValueString -> None
+                // get just the count of available nodes with that stat
+                | After "getStat " (Quoted (ValueString stat,After "<" (Before ">" uri)))
+                | After "getStat " (Quoted (ValueString stat,After "`"(Before "`" uri))) ->
+                    printfn "we have a full get stat request"
+                    match getMappedNodes System.Environment.CurrentDirectory with
+                    | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
+                    | Some nc ->
+                        printfn "node information found"
+                        let search =
+                            match stat with
+                            | "Spell Damage" ->
+                                "% increased Spell Damage"
+                            | _ -> stat
+                        match PathOfExile.Domain.TreeParsing.PassiveJsParsing.decodeUrl nc.nodes uri with
+                        | None -> Some(SocketMessage.reply' sm "Tree decoding failed" :> Task)
+                        | Some treeInfo ->
+                            printfn "Conducting Search"
+                            let relevantValues=
+                                treeInfo.Nodes
+                                |> Seq.collect(fun n -> n.sd)
+                                |> Seq.filter (fun x -> x.EndsWith search)
+                                |> List.ofSeq
+                            printfn "Search completed"
+                            let count = relevantValues.Length
+                            Some(SocketMessage.reply' sm <| sprintf "Found %i nodes with %s in the tree" count stat :> Task)
+                | After "getStat " (Quoted (ValueString stat,_))
+                | After "getStat " (Quoted (ValueString stat,_)) ->
+                    match getMappedNodes System.Environment.CurrentDirectory with
+                    | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
+                    | Some nc ->
+                        let search =
+                            match stat with
+                            | "Spell Damage" ->
+                                "% increased Spell Damage"
+                            | _ -> stat
+                        let relevantValues=
+                            nc.nodes.Values
+                            |> Seq.collect(fun x -> x.sd)
+                            |> Seq.filter (fun x -> x.EndsWith search)
+                            |> List.ofSeq
+                        let count = relevantValues.Length
+                        Some(SocketMessage.reply' sm <| sprintf "Found %i nodes with %s" count stat :> Task)
+                | _ -> None
+
+            )
+        }
     let getClass =
         "getClass",
         {
@@ -257,14 +314,7 @@ module Exiling =
                     printfn "Found uri, worked?%A, he's:%s" reggie.IsSome uri
                     reggie
                     |> Option.bind (fun _ ->
-                            match nodeCache with
-                            | Some nc -> Some nc
-                            | None ->
-                                match Impl.getMappedNodes(System.Environment.CurrentDirectory) with
-                                | Some nc ->
-                                    nodeCache <- Some nc
-                                    Some nc
-                                | None -> None
+                        getMappedNodes System.Environment.CurrentDirectory
                     )
                     |> Option.bind(fun nc -> decodeUrl nc.nodes uri)
                     |> Option.bind(fun tree -> tree.Class)
@@ -301,6 +351,7 @@ module Commandments =
             Exiling.getProfile
             Exiling.setProfile
             Exiling.getClass
+            Exiling.getStat
             Generalities.cleaning
         ]
         |> List.map(fun (x,c) ->  sprintf "!%s" x, c)

@@ -28,7 +28,7 @@ let before delim =
     >> Option.bind(fun x ->
         let i = x.IndexOf delim
         if i >= 0 then
-            Some (x.[0..i])
+            Some (x.[0..i-delim.Length])
         else None
     )
 let (|After|_|) = after
@@ -83,6 +83,19 @@ module Regex =
                 Some m.Groups.[i].Value
         | _ -> None
 
+// advance/pluck next quoted token
+let (|Quoted|_|)=
+    function
+    | NonValueString -> None
+    | Regex.RMatch @"^\s*'([^']+)'(\s|$)" x
+    | Regex.RMatch @"^\s*""([^\""]+)\""(\s|$)" x as txt ->
+        let token = x.Groups.[1].Value
+        let i = x.Index+x.Length
+        let rem = if txt.Length > i then txt.[i..] else String.Empty
+        printfn "We have a match! remainder is '%s'" rem
+        Some(token,rem)
+    | _ -> None
+
 open System.Linq
 // http://www.fssnip.net/hv/title/Extending-async-with-await-on-tasks
 type Microsoft.FSharp.Control.AsyncBuilder with
@@ -90,6 +103,8 @@ type Microsoft.FSharp.Control.AsyncBuilder with
         x.Bind(Async.AwaitTask t,f)
     member x.Bind(t:System.Threading.Tasks.Task, f:unit -> Async<unit>) : Async<unit> =
         x.Bind(Async.AwaitTask t,f)
+
+    // based on https://github.com/RogueException/Discord.Net/blob/ff0fea98a65d907fbce07856f1a9ef4aebb9108b/src/Discord.Net.Core/Extensions/AsyncEnumerableExtensions.cs
     member x.Bind(e:IAsyncEnumerable<IEnumerable<'t>>,f) =
         let t = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ToArray()
         x.Bind(t,f)

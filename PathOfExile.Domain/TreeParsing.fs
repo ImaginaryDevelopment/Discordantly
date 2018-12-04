@@ -139,19 +139,24 @@ module PassiveJsParsing =
     let decodeUrl (nodes:IDictionary<int,Node>) url =
         url
         |> regIt
-        |> Option.map(fun x ->
-            x
-            |> decodebase64Url
-            |> decodePayload
-            |> fun x ->
-                {
-                    Version=x.Version
-                    Class=
-                        match x.CharClass,x.Ascendency with
-                        | IsClass x -> Some x
-                        | (cls,asc) ->
-                            printfn "No class/asc setup for %A" (cls,asc)
-                            None
-                    Nodes= x.Nodes |> List.map(fun n -> nodes.[n])
-                }
+        |> Option.bind(fun x ->
+            try
+                x
+                |> decodebase64Url
+                |> decodePayload
+                |> fun x ->
+                    {
+                        Version=x.Version
+                        Class=
+                            match x.CharClass,x.Ascendency with
+                            | IsClass x -> Some x
+                            | (cls,asc) ->
+                                printfn "No class/asc setup for %A" (cls,asc)
+                                None
+                        Nodes= x.Nodes |> List.map(fun n -> nodes.[n])
+                    }
+                |> Some
+            with ex ->
+                printfn "Failed to decodeUrl '%s' '%s'" ex.Message url
+                None
         )
