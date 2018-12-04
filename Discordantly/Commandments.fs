@@ -264,11 +264,11 @@ module Exiling =
                     | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
                     | Some nc ->
                         printfn "node information found"
-                        let search =
-                            match stat with
-                            | "Spell Damage" ->
-                                "% increased Spell Damage"
-                            | _ -> stat
+                        let search = stat
+                        //    match stat with
+                        //    | "Spell Damage" ->
+                        //        "% increased Spell Damage"
+                        //    | _ -> stat
                         match PathOfExile.Domain.TreeParsing.PassiveJsParsing.decodeUrl nc.nodes uri with
                         | None -> Some(SocketMessage.reply' sm "Tree decoding failed" :> Task)
                         | Some treeInfo ->
@@ -276,7 +276,7 @@ module Exiling =
                             let relevantValues=
                                 treeInfo.Nodes
                                 |> Seq.collect(fun n -> n.sd)
-                                |> Seq.filter (fun x -> x.EndsWith search)
+                                |> Seq.filter (fun x -> x.Contains(search, System.StringComparison.InvariantCultureIgnoreCase))
                                 |> List.ofSeq
                             printfn "Search completed"
                             let count = relevantValues.Length
