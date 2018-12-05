@@ -7,8 +7,7 @@ let main argv =
     match List.ofArray argv with
     | StringEqualsI "pob" :: pobLink :: [] ->
         PathOfExile.Domain.TreeParsing.PathOfBuildingParsing.Impl.parseCode pobLink
-        |> Map.toSeq
-        |> Seq.iter(printfn "%A")
+        |> printfn "%A"
         Console.ReadLine() |> ignore
     | _ -> Console.Error.WriteLine "Unknown command"
     0

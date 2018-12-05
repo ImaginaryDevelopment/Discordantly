@@ -170,7 +170,7 @@ module Xml =
         getAttribValue name xe
         |> Option.getOrDefault null
 
-    let getElement name (xe:XElement) = xe.Element(toXName name)
+    let getElement name (xe:XElement) = xe.Element(toXName name) |> Option.ofObj
     let getElements name (xe:XElement) = xe.Elements(toXName name)
     let getAllElements (xe:XElement) = xe.Elements()
     let getElementsByName name (xe:XElement) = xe.Elements(toXName name)

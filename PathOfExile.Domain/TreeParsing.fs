@@ -164,6 +164,19 @@ module PassiveJsParsing =
 
 // based on https://github.com/Kyle-Undefined/PoE-Bot/blob/997a15352c83b0959da03b1f59db95e4a5df758c/Helpers/PathOfBuildingHelper.cs
 module PathOfBuildingParsing =
+    type Gem = {SkillId:string; Name:string; Level:int; Quality:int;Enabled:bool}
+    type SkillGroup = {Gems:Gem list;IsEnabled:bool; Slot:string; IsSelectedGroup:bool}
+    type CharacterSkills = {MainSkillIndex:int; SkillGroups: SkillGroup list} with
+        member x.MainSkillGroup =
+            if x.MainSkillIndex >= 0 && x.MainSkillIndex < x.SkillGroups.Length then
+                Some x.SkillGroups.[x.MainSkillIndex]
+            else None
+    type Summary = Map<string,string>
+    type Item = {Id:int; Raw:string}
+    type ItemSlot = {Name:string; Id:int}
+    type MinionSummary = MinionSummary
+    type Character = {Level:int; Class:string;Ascendancy:string; AuraCount:int; Config:string; CurseCount:int; Items:Item seq; ItemSlots:ItemSlot seq ; Summary:Summary; MinionSummary:MinionSummary;Skills:CharacterSkills;Tree:string}
+
     module Impl =
         open System.IO
         open Ionic.Zlib
@@ -171,6 +184,19 @@ module PathOfBuildingParsing =
         open System.Xml.Linq
         open Schema.BReusable.StringHelpers
         open Schema.Helpers.Xml
+        open System.Net.Http
+
+        let fromPasteBin (uri) =
+            if not <| String.startsWith "https://pastebin.com/" uri then None
+            else 
+                let raw = "https://pastebin.com/raw/"
+                let last = uri.Split('/') |> Array.last
+                use client = new HttpClient()
+                sprintf "%s%s" raw last
+                |> client.GetStringAsync
+                |> Async.AwaitTask
+                |> Async.RunSynchronously
+                |> Some
 
         let fromBase64ToXml(base64:string) =
             let dec =
@@ -181,8 +207,9 @@ module PathOfBuildingParsing =
             use input = new MemoryStream(dec)
             use deflate = new ZlibStream(input, CompressionMode.Decompress)
             use output = new MemoryStream()
-            deflate.CopyTo(output)
-            Encoding.UTF8.GetString(output.ToArray())
+            deflate.CopyTo output
+            output.ToArray()
+            |> Encoding.UTF8.GetString
 
         // include validation, only create if result is valid
         let tryCreateStat (xe:XElement) : (string*string) option =
@@ -195,28 +222,107 @@ module PathOfBuildingParsing =
                 eprintfn "Unexpected (stat='%s',value='%s')" statOpt valueOpt
                 None
 
+        let mapElementSequence key subKey f =
+            getElement key
+            >> Option.map(
+                    getElements subKey
+                    >> Seq.map f
+                    >> List.ofSeq
+            )
+
         let getPlayerStats (xe:XElement) =
             xe
             |> getElement "Build"
-            |> getElements "PlayerStat"
-            //|> Seq.map StatObject
-            //|> Seq.filter StatObject.IsValid
-            |> Seq.choose tryCreateStat
-            |> Seq.groupBy fst
-            |> Seq.choose(fun (name,x) ->
-                match x |> Seq.map snd |> Seq.tryHead with
-                | Some "0" -> None
-                | Some value ->
-                    Some (name,value)
-                | None -> eprintfn "unexpected stat/value"; None
+            |> Option.map(
+                getElements "PlayerStat"
+                //|> Seq.map StatObject
+                //|> Seq.filter StatObject.IsValid
+                >> Seq.choose tryCreateStat
+                >> Seq.groupBy fst
+                >> Seq.choose(fun (name,x) ->
+                    match x |> Seq.map snd |> Seq.tryHead with
+                    | Some "0" -> None
+                    | Some value ->
+                        Some (name,value)
+                    | None -> eprintfn "unexpected stat/value"; None
+                )
+                >> Map.ofSeq
             )
-            |> Map.ofSeq
+        let getGemsFromSkill =
+            getElements "Gem"
+            >> Seq.map(fun c ->
+                {   SkillId= getAttribValueOrNull "skillId" c
+                    Name= getAttribValueOrNull "nameSpec" c
+                    Level= getAttribValue "level" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
+                    Quality = getAttribValue "quality" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
+                    Enabled = getAttribValue "enabled" c |> Option.bind (|ParseBoolean|_|) |> Option.defaultValue false
+                }
+            )
 
-        let parseCode (base64:string) =
+        let getCharacterSkills (xe:XElement) =
+            let mainGroup = xe |> getElement "Build" |> Option.bind (getAttribValue "mainSocketGroup") |> Option.bind (|ParseInt|_|)
+            let skills =
+                xe
+                |> getElement "Skills"
+                |> Option.map(
+                    getElements "Skill"
+                    >> Seq.map (fun c -> {
+                                            Gems= getGemsFromSkill c |> List.ofSeq
+                                            Slot= getAttribValue "slot" c |> Option.defaultValue null
+                                            IsEnabled=getAttribValue "enabled" c |>  Option.bind (|ParseBoolean|_|) |> Option.defaultValue false
+                                            IsSelectedGroup = false
+                                        }
+                    )
+                    >> List.ofSeq
+                )
+            match skills with
+            | Some skills ->
+                Some {SkillGroups=skills;MainSkillIndex = Option.defaultValue -1 mainGroup}
+            | None -> None
+
+        let getItemSlots =
+            mapElementSequence "Items" "Slot" (fun c ->
+                    {
+                        Name=getAttribValueOrNull "name" c
+                        Id=getAttribValue "itemId" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
+                    }
+            )
+        let getItems =
+            mapElementSequence "Items" "Item" (fun c ->
+                    {   Id=getAttribValue "id" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
+                        Raw = string c
+                    }
+                )
+        let parseCode (base64:string) :Character =
             let xDoc =
                 let xml = fromBase64ToXml base64 |> XDocument.Parse
                 let tXml = xml |> string |> replace "Spec:" String.Empty
                 tXml |> XDocument.Parse
             let sum = getPlayerStats xDoc.Root
-            sum
+            let minionSum = MinionSummary
 
+            let skills = getCharacterSkills xDoc.Root |> Option.defaultValue {SkillGroups=List.empty; MainSkillIndex= -1}
+            let itemSlots = getItemSlots xDoc.Root |> Option.defaultValue List.empty
+            let items = getItems xDoc.Root |> Option.defaultValue List.empty
+
+            {   Skills=skills
+                Level= -1
+                Class=null
+                Ascendancy=null
+                AuraCount = -1
+                CurseCount= -1
+                Items= items :> _ seq
+                ItemSlots=itemSlots :> _ seq
+                Config=null
+                Summary=sum |> Option.defaultValue Map.empty
+                MinionSummary = minionSum
+                Tree = null
+            }
+
+    open Impl
+    let parseText =
+        function
+        | StartsWith "http" & Contains "pastebin" as x ->
+            Impl.fromPasteBin x
+        | x -> Some x
+        >> Option.map parseCode
