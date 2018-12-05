@@ -185,6 +185,9 @@ module PathOfBuildingParsing =
         open Schema.BReusable.StringHelpers
         open Schema.Helpers.Xml
         open System.Net.Http
+        let getIntAttrib name =
+            getAttribValue name
+            >> Option.bind (|ParseInt|_|)
 
         let fromPasteBin (uri) =
             if not <| String.startsWith "https://pastebin.com/" uri then None
@@ -230,14 +233,10 @@ module PathOfBuildingParsing =
                     >> List.ofSeq
             )
 
-        let getPlayerStats (xe:XElement) =
-            xe
-            |> getElement "Build"
-            |> Option.map(
-                getElements "PlayerStat"
-                //|> Seq.map StatObject
-                //|> Seq.filter StatObject.IsValid
-                >> Seq.choose tryCreateStat
+        let getPlayerStats: _ -> Map<string,string> option =
+            mapElementSequence "Build" "PlayerStat" tryCreateStat
+            >> Option.map(
+                Seq.choose id
                 >> Seq.groupBy fst
                 >> Seq.choose(fun (name,x) ->
                     match x |> Seq.map snd |> Seq.tryHead with
@@ -248,32 +247,29 @@ module PathOfBuildingParsing =
                 )
                 >> Map.ofSeq
             )
+
         let getGemsFromSkill =
             getElements "Gem"
             >> Seq.map(fun c ->
                 {   SkillId= getAttribValueOrNull "skillId" c
                     Name= getAttribValueOrNull "nameSpec" c
-                    Level= getAttribValue "level" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
-                    Quality = getAttribValue "quality" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
+                    Level= getIntAttrib "level" c |> Option.defaultValue -1
+                    Quality = getIntAttrib "quality" c  |> Option.defaultValue -1
                     Enabled = getAttribValue "enabled" c |> Option.bind (|ParseBoolean|_|) |> Option.defaultValue false
                 }
             )
 
         let getCharacterSkills (xe:XElement) =
-            let mainGroup = xe |> getElement "Build" |> Option.bind (getAttribValue "mainSocketGroup") |> Option.bind (|ParseInt|_|)
+            let mainGroup = xe |> getElement "Build" |> Option.bind (getIntAttrib "mainSocketGroup")
             let skills =
                 xe
-                |> getElement "Skills"
-                |> Option.map(
-                    getElements "Skill"
-                    >> Seq.map (fun c -> {
+                |> mapElementSequence "Skills" "Skill" (
+                        fun c ->        {
                                             Gems= getGemsFromSkill c |> List.ofSeq
                                             Slot= getAttribValue "slot" c |> Option.defaultValue null
                                             IsEnabled=getAttribValue "enabled" c |>  Option.bind (|ParseBoolean|_|) |> Option.defaultValue false
                                             IsSelectedGroup = false
                                         }
-                    )
-                    >> List.ofSeq
                 )
             match skills with
             | Some skills ->
