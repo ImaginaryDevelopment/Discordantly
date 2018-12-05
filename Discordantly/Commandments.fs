@@ -2,7 +2,9 @@
 
 open System.Threading.Tasks
 
+open Schema.BReusable
 open Schema.Helpers
+open Schema.Helpers.StringPatterns
 
 open Discord.WebSocket
 open Discord
@@ -23,7 +25,6 @@ type MessageType =
 
 module SocketMessage =
     open Discord.Rest
-    open Schema.Helpers
 
     type AsyncReplyWrapper = {RestUserMessage:Rest.RestUserMessage; DeleteMe:bool}
     let deleteAndReply (sm:SocketMessage) (txt:string):Task<_> =
@@ -103,7 +104,7 @@ module Generalities =
         {   TriggerHelp=["Maid Service, you want hot towel?"]
             F= Complex (fun cp sm ->
                 match sm.Content with 
-                | EndsWith "maidservice" ->
+                | EndsWith "maidservice" _ ->
                     printfn "Cleaning up msgs"
                     let msgs = sm.Channel.GetMessagesAsync 40
                     let a =
@@ -126,7 +127,7 @@ module Generalities =
         }
 // profile tracking, etc
 module Exiling =
-    open Regex
+    open Schema.Helpers.StringPatterns
     type private ExileMap = Map<uint64,string>
     module Impl =
         type LikeAProperty<'t>(initialValue:'t,fSideEffect) =
@@ -255,7 +256,7 @@ module Exiling =
             TriggerHelp=["getStat '[stat]' (PassiveTreeLink)"; "stats:"; "  Spell Damage";"  Life"]
             F= Complex(fun cp sm ->
                 match sm.Content with
-                | NonValueString -> None
+                | NonValueString _ -> None
                 // get just the count of available nodes with that stat
                 | After "getStat " (Quoted (ValueString stat,After "<" (Before ">" uri)))
                 | After "getStat " (Quoted (ValueString stat,After "`"(Before "`" uri))) ->

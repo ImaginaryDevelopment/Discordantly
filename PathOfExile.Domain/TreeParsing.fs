@@ -3,7 +3,7 @@
 open System
 open System.Collections.Generic
 open Newtonsoft.Json.Linq
-open Schema.Helpers
+open Schema.BReusable
 
 type NodeType =
     |Normal
@@ -52,6 +52,7 @@ type NodeType =
 //            var passiveSkillTreeData = ...
 module PassiveJsParsing =
     module Impl =
+        open Schema.Helpers
         open System.Buffers.Text
 
         type Node = {
@@ -129,7 +130,7 @@ module PassiveJsParsing =
 
         let regIt =
             function
-            | Regex.RMatch "AAAA[^?]+" m -> Some m.Value
+            | RMatch "AAAA[^?]+" m -> Some m.Value
             | _ -> None
 
     open Impl
@@ -160,3 +161,31 @@ module PassiveJsParsing =
                 printfn "Failed to decodeUrl '%s' '%s'" ex.Message url
                 None
         )
+
+// based on https://github.com/Kyle-Undefined/PoE-Bot/blob/997a15352c83b0959da03b1f59db95e4a5df758c/Helpers/PathOfBuildingHelper.cs
+module PathOfBuildingParsing =
+    module Impl =
+        open System.IO
+        open Ionic.Zlib
+        open System.Text
+        open System.Xml.Linq
+        open Schema.BReusable.StringHelpers
+
+        let fromBase64ToXml(base64:string) =
+            let dec =
+                base64
+                |> replace "-" "+"
+                |> replace "_" "/"
+                |> Convert.FromBase64String
+            use input = new MemoryStream(dec)
+            use deflate = new ZlibStream(input, CompressionMode.Decompress)
+            use output = new MemoryStream()
+            deflate.CopyTo(output)
+            Encoding.UTF8.GetString(output.ToArray())
+
+        let parseCode (base64:string) =
+            let xDoc =
+                let xml = fromBase64ToXml base64 |> XDocument.Parse
+                let tXml = xml |> string |> replace "Spec:" String.Empty
+                tXml |> XDocument.Parse
+            xDoc

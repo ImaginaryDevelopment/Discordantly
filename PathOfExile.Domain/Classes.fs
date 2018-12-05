@@ -1,6 +1,6 @@
 namespace PathOfExile.Domain
 
-open Schema.Helpers
+open Schema.BReusable
 
 
 module Classes =
