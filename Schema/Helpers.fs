@@ -155,3 +155,22 @@ module Reflection =
                         sprintf "%A %A" uInfo.Name (fieldValues |> Array.map fIt)
                 ) |> Option.defaultValue (sprintf "%A" x)
         fIt x
+
+module Xml =
+    open System.Xml.Linq
+    let toXName = XName.op_Implicit
+
+    let getAttribValue name (xe:XElement) : string option =
+        toXName name
+        |> xe.Attribute
+        |> Option.ofObj
+        |> Option.map(fun x -> x.Value)
+
+    let getAttribValueOrNull name (xe:XElement) : string =
+        getAttribValue name xe
+        |> Option.getOrDefault null
+
+    let getElement name (xe:XElement) = xe.Element(toXName name)
+    let getElements name (xe:XElement) = xe.Elements(toXName name)
+    let getAllElements (xe:XElement) = xe.Elements()
+    let getElementsByName name (xe:XElement) = xe.Elements(toXName name)

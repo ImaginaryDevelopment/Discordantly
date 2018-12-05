@@ -170,6 +170,7 @@ module PathOfBuildingParsing =
         open System.Text
         open System.Xml.Linq
         open Schema.BReusable.StringHelpers
+        open Schema.Helpers.Xml
 
         let fromBase64ToXml(base64:string) =
             let dec =
@@ -183,9 +184,39 @@ module PathOfBuildingParsing =
             deflate.CopyTo(output)
             Encoding.UTF8.GetString(output.ToArray())
 
+        // include validation, only create if result is valid
+        let tryCreateStat (xe:XElement) : (string*string) option =
+            match getAttribValue "stat" xe,getAttribValue "value" xe with
+            | Some (ValueString stat), Some(ValueString value) ->
+                Some(stat,value)
+            | None,_ -> None
+            | _,None -> None
+            | Some(statOpt), Some(valueOpt) ->
+                eprintfn "Unexpected (stat='%s',value='%s')" statOpt valueOpt
+                None
+
+        let getPlayerStats (xe:XElement) =
+            xe
+            |> getElement "Build"
+            |> getElements "PlayerStat"
+            //|> Seq.map StatObject
+            //|> Seq.filter StatObject.IsValid
+            |> Seq.choose tryCreateStat
+            |> Seq.groupBy fst
+            |> Seq.choose(fun (name,x) ->
+                match x |> Seq.map snd |> Seq.tryHead with
+                | Some "0" -> None
+                | Some value ->
+                    Some (name,value)
+                | None -> eprintfn "unexpected stat/value"; None
+            )
+            |> Map.ofSeq
+
         let parseCode (base64:string) =
             let xDoc =
                 let xml = fromBase64ToXml base64 |> XDocument.Parse
                 let tXml = xml |> string |> replace "Spec:" String.Empty
                 tXml |> XDocument.Parse
-            xDoc
+            let sum = getPlayerStats xDoc.Root
+            sum
+
