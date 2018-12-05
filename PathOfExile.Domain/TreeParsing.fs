@@ -93,7 +93,7 @@ module PassiveJsParsing =
                 constants:JObject
         }
         let getMappedNodes folderPath =
-            IO.Path.Combine(folderPath,"Passives.json")
+            IO.Path.Combine(folderPath,"Passives3.5.json")
             |> IO.File.ReadAllText
             |> SuperSerial.deserialize<PassiveLookup>
 
