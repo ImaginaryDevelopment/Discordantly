@@ -190,16 +190,15 @@ module Exiling =
     let setProfile:string*NotSimple =
         "setProfile",
         {
-            TriggerHelp=["setProfile [account name] (for example: DevelopersDevelopersDevelopers)"]
-            F= Complex (fun cp sm ->
-                match sm.Content with
-                | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
-                    Impl.Profiling.profiles.Value <-
-                        Impl.Profiling.profiles.Value
-                        |> Map.add sm.Author.Id profileName
+            TriggerHelp=[
+                "setProfile [account name] (for example: DevelopersDevelopersDevelopers)"
+                "setProfile @userName '[account name]'"
+            ]
+            F=
+                let replySet sm username profileName =
                     async {
                         do!
-                            [Keepsies <| sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." sm.Author.Username profileName]
+                            [Keepsies <| sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." username profileName]
                             |> SocketMessage.reply sm
                             |> Async.AwaitTask
                             |> Async.Ignore
@@ -213,6 +212,26 @@ module Exiling =
                     |> Async.StartAsTask
                     :> Task
                     |> Some
+                Complex (fun cp sm ->
+                match sm.Content with
+                | AfterI "setProfile" (RMatch "@.* '([^']+)'$" (RGroup 1 accountName)) ->
+                    if sm.MentionedUsers.Count = 1 then
+                        let targetUser = sm.MentionedUsers |> Seq.head
+                        printfn "Running setProfile @ '%s'" accountName
+                        Impl.Profiling.profiles.Value <-
+                            Impl.Profiling.profiles.Value
+                            |> Map.add targetUser.Id accountName
+                        replySet sm targetUser.Username accountName
+                    else
+                        SocketMessage.reply' sm "unable to understand your comment, mention the user then the profile name in ''"
+                        :> Task
+                        |> Some
+                | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
+                    printfn "Running setProfile ..."
+                    Impl.Profiling.profiles.Value <-
+                        Impl.Profiling.profiles.Value
+                        |> Map.add sm.Author.Id profileName
+                    replySet sm sm.Author.Username profileName
                 | RMatch "setProfile$" _ ->
                     (sm.Author.Username, Impl.Profiling.findExileUser cp sm.Author.Username)
                     |> onProfileSearch

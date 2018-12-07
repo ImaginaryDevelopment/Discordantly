@@ -288,32 +288,35 @@ module PathOfBuildingParsing =
                     {   Id=getAttribValue "id" c |> Option.bind (|ParseInt|_|) |> Option.defaultValue -1
                         Raw = string c
                     }
-                )
-        let parseCode (base64:string) :Character =
+            )
+        let parseCode (base64:string) : Character =
             let xDoc =
                 let xml = fromBase64ToXml base64 |> XDocument.Parse
                 let tXml = xml |> string |> replace "Spec:" String.Empty
                 tXml |> XDocument.Parse
-            let sum = getPlayerStats xDoc.Root
+            dumpXE (Some "parsed") xDoc.Root
             let minionSum = MinionSummary
 
             let skills = getCharacterSkills xDoc.Root |> Option.defaultValue {SkillGroups=List.empty; MainSkillIndex= -1}
-            let itemSlots = getItemSlots xDoc.Root |> Option.defaultValue List.empty
-            let items = getItems xDoc.Root |> Option.defaultValue List.empty
 
-            {   Skills=skills
-                Level= -1
-                Class=null
-                Ascendancy=null
-                AuraCount = -1
-                CurseCount= -1
-                Items= items :> _ seq
-                ItemSlots=itemSlots :> _ seq
-                Config=null
-                Summary=sum |> Option.defaultValue Map.empty
-                MinionSummary = minionSum
-                Tree = null
-            }
+            let build = xDoc.Root |> getElement "Build"
+            let getBuildAttribValue name = build |> Option.bind(getAttribValue name)
+            let result =
+                {   Skills=skills
+                    Level= getBuildAttribValue "level"|>Option.bind (|ParseInt|_|) |> Option.defaultValue -1
+                    Class= getBuildAttribValue "className" |> Option.defaultValue null
+                    Ascendancy= getBuildAttribValue "ascendClassName" |> Option.defaultValue null
+                    AuraCount = -1
+                    CurseCount= -1
+                    Items= getItems xDoc.Root |> Option.defaultValue List.empty :> _ seq
+                    ItemSlots= getItemSlots xDoc.Root |> Option.defaultValue List.empty :> _ seq
+                    Config=null
+                    Summary=getPlayerStats xDoc.Root |> Option.defaultValue Map.empty
+                    MinionSummary = minionSum
+                    Tree = null
+                }
+            Schema.Helpers.Utils.dump (Some "character") id <| box result
+            result
 
     open Impl
     let parseText =
