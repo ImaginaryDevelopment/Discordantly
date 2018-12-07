@@ -160,7 +160,7 @@ module Exiling =
             function
                 | un, Some(_user,pn) ->
                         [   Keepsies <| sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
-                            Deletesies <| sprintf "Served, get it while it's hot: https://www.pathofexile.com/account/view-profile/%s/characters" pn
+                            Keepsies <| sprintf "You just got served <https://www.pathofexile.com/account/view-profile/%s/characters>" pn
                         ]
                 | un, None ->
                         [Keepsies <| sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
@@ -247,14 +247,19 @@ module Exiling =
         {
             TriggerHelp=["alone it will get your own";"or specify a username to another user's profile if they have one"]
             F=
+                let serveProfile sm cp userName =
+                    (userName,Impl.Profiling.findExileUser cp userName)
+                    |> onProfileSearch
+                    |> SocketMessage.reply sm
+                    :> Task
+                    |> Some
                 Complex (fun cp sm ->
                     match sm.Content with
-                    | After "getProfile " (UserName userName) ->
-                        (userName,Impl.Profiling.findExileUser cp userName)
-                        |> onProfileSearch
-                        |> SocketMessage.reply sm
-                        :> Task
-                        |> Some
+                    | ContainsI "getProfile" when sm.MentionedUsers.Count = 1 ->
+                        let un = sm.MentionedUsers |> Seq.head
+                        serveProfile sm cp un.Username
+                    | AfterI "getProfile " (UserName userName) ->
+                        serveProfile sm cp userName
                     | RMatch "getProfile\s*$" _ ->
                         getAuthorProfile sm.Author cp
                         |> SocketMessage.reply sm
