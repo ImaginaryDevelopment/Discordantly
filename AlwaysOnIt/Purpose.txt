@@ -1,0 +1,2 @@
+﻿To keep something else running, and stop/start it when a debugger version is running.
+I want to be able to have the last compiling version of Discordantly running, and when another copy launches, it shuts down the already running one, and copies the new version to the always on location to re-launch it

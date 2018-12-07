@@ -198,7 +198,7 @@ module Exiling =
                 let replySet sm username profileName =
                     async {
                         do!
-                            [Keepsies <| sprintf "I set %s's poeprofile name to %s. I hope you capitalized it properly." username profileName]
+                            [Keepsies <| sprintf "I set `%s`'s poeprofile name to `%s`. I hope you capitalized it properly." username profileName]
                             |> SocketMessage.reply sm
                             |> Async.AwaitTask
                             |> Async.Ignore
