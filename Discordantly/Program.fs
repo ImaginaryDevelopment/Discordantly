@@ -61,7 +61,7 @@ let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
                     |> send
 
             | NotSimpleton (_cmdName, _help, Multiple lines) ->
-                SocketMessage.reply sm (lines |> List.map MessageType.Keepsies)
+                SocketMessage.reply sm (lines |> List.map MessageLifeType.Keepsies)
                 |> ignore
             | NotSimpleton (_cmdName, _, _) ->
                 send ["Tell my creator he needs to learn how to code better"]

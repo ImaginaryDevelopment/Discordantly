@@ -19,7 +19,7 @@ type ClientProxy(client:DiscordSocketClient) =
     member __.SetStatusAsync user = client.SetStatusAsync user
     member __.GetUser id = client.GetUser(id=id)
     member __.GetUser (username, discriminator) = client.GetUser(username, discriminator)
-type MessageType =
+type MessageLifeType =
     | Keepsies of string
     | Deletesies of string
 
@@ -36,7 +36,7 @@ module SocketMessage =
 
     let reply' (sm:SocketMessage) (txt:string):Task<_>=
         upcast sm.Channel.SendMessageAsync txt
-    let reply(sm:SocketMessage) (txt:MessageType list) :Task<_> =
+    let reply(sm:SocketMessage) (txt:MessageLifeType list) :Task<_> =
         let single x :Async<AsyncReplyWrapper list> =
             async {
                 let (deleteMe,x) =
@@ -104,7 +104,7 @@ module Generalities =
         {   TriggerHelp=["Maid Service, you want hot towel?"]
             F= Complex (fun cp sm ->
                 match sm.Content with 
-                | EndsWith "maidservice" _ ->
+                | EndsWithI "maidservice" _ ->
                     printfn "Cleaning up msgs"
                     let msgs = sm.Channel.GetMessagesAsync 40
                     let a =
@@ -226,13 +226,13 @@ module Exiling =
                         SocketMessage.reply' sm "unable to understand your comment, mention the user then the profile name in ''"
                         :> Task
                         |> Some
-                | After "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
+                | AfterI "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
                     printfn "Running setProfile ..."
                     Impl.Profiling.profiles.Value <-
                         Impl.Profiling.profiles.Value
                         |> Map.add sm.Author.Id profileName
                     replySet sm sm.Author.Username profileName
-                | RMatch "setProfile$" _ ->
+                | RMatchI "setProfile$" _ ->
                     (sm.Author.Username, Impl.Profiling.findExileUser cp sm.Author.Username)
                     |> onProfileSearch
                     |> SocketMessage.reply sm
@@ -245,7 +245,7 @@ module Exiling =
     let getProfile:string*NotSimple=
         "getProfile",
         {
-            TriggerHelp=["alone it will get your own";"or specify a username to another user's profile if they have one"]
+            TriggerHelp=["`getProfile` help - alone it will get your own";"or specify a username to get another user's profile if they have one"]
             F=
                 let serveProfile sm cp userName =
                     (userName,Impl.Profiling.findExileUser cp userName)
@@ -392,19 +392,27 @@ module Commandments =
                 sprintf "%s\r\n  %s" text line
             )
         ["command list:";items]
-        //|> Multiple
 
     // dispatch ( take in the author id, bot id, full message text
     let (|Simpleton|NotSimpleton|UhOh|IgnoranceIsBliss|) (authorId,botUserId, content) =
         let ns (cmd:string,help:string list, f) = NotSimpleton (cmd,help,f)
-        if authorId = botUserId || content |> String.IsNullOrWhiteSpace then
-            IgnoranceIsBliss
-        elif simpleReplies.ContainsKey content then
-            Simpleton [simpleReplies.[content]]
-        elif content = "!help" then
-            //let result : ReplyType = help
-            Simpleton help
-        else
+        match content with
+        | _ when authorId = botUserId -> IgnoranceIsBliss
+        | NonValueString _ -> IgnoranceIsBliss
+        | _ when simpleReplies.ContainsKey content -> Simpleton [simpleReplies.[content]]
+        | EqualsI "!help" -> Simpleton help
+        | AfterI "!help" (RMatchGroup "^\s(\w+)" 1 value) ->
+            let searchValue = sprintf "!%s" value
+            match notSimpleReplies |> Map.tryFindKey(fun k _ -> String.equalsI k searchValue) with
+            | Some key ->
+                Simpleton notSimpleReplies.[key].TriggerHelp
+                //|> List.map MessageLifeType.Keepsies
+                //|> SocketMessage.reply sm
+                //:> Task
+                //|> Some
+            | None ->
+                Simpleton ["Sorry, I am unable to determine which command you want help with"]
+        | _ ->
             notSimpleReplies
             |> Map.tryFindKey(fun k _ -> content.StartsWith k)
             |> function

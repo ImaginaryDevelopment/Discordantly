@@ -173,6 +173,25 @@ module StringPatterns =
                 Some m.Groups.[i].Value
         | _ -> None
     let (|RGroup|) (i:int) (m:Match) = m.Groups.[i].Value
+    let (|RMatchI|_|) p text =
+        let m = Regex.Match(text,p,RegexOptions.IgnoreCase)
+        if m.Success then
+            Some m
+        else None
+
+    let (|EndsWithI|_|) d =
+        function
+        | null | "" -> None
+        | _ when String.IsNullOrEmpty d -> invalidOp "Bad delimiter"
+        | x when x.EndsWith(d, StringComparison.InvariantCultureIgnoreCase) -> Some ()
+        | _ -> None
+
+    let (|EqualsI|_|) d =
+        function
+        | null when isNull d -> Some()
+        | null when not <| isNull d -> None
+        | x -> if String.equalsI x d then Some() else None
+
 
     // advance/pluck next quoted token
     let (|Quoted|_|)=
