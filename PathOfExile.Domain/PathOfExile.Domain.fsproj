@@ -6,9 +6,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="Passives3.5.json" />
     <Compile Include="Classes.fs" />
-    <Compile Include="TreeParsing.fs" />
+    <Compile Include="Parsing\TreeParsing.fs" />
+    <Content Include="Gems3.5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Passives3.5.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Compile Include="Program.fs" />
   </ItemGroup>
 

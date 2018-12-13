@@ -185,6 +185,8 @@ module Exiling =
     open Impl
     open System.Net.Sockets
     open PathOfExile.Domain.TreeParsing.PassiveJsParsing
+    open PathOfExile.Domain.TreeParsing.PathOfBuildingParsing
+    open Schema.Helpers
 
 
     let setProfile:string*NotSimple =
@@ -274,6 +276,15 @@ module Exiling =
             nodeCache <- Some nc
             Some nc
         | None -> None
+    let (|Link|_|) =
+        function 
+        | After "<" (Before ">" uri)
+        | After "`"(Before "`" uri)
+        // this allows links that haven't had previews shut off by surrounding tokens
+        | RMatchGroup @"(http[^ ]+)(\s|$)" 1 uri ->
+            Some uri
+        | _ -> None
+    
     let getStat =
         "getStat",
         {
@@ -282,8 +293,7 @@ module Exiling =
                 match sm.Content with
                 | NonValueString _ -> None
                 // get just the count of available nodes with that stat
-                | After "getStat " (Quoted (ValueString stat,After "<" (Before ">" uri)))
-                | After "getStat " (Quoted (ValueString stat,After "`"(Before "`" uri))) ->
+                | After "getStat " (Quoted (ValueString stat,Link uri)) ->
                     printfn "we have a full get stat request"
                     match getMappedNodes System.Environment.CurrentDirectory with
                     | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
@@ -327,6 +337,39 @@ module Exiling =
 
             )
         }
+    // find a build's enabled skills along with minimum level to equip
+    let getSkills =
+        "getSkills",
+        {   TriggerHelp=[]
+            F= Complex (fun cp sm ->
+                match sm.Content with
+                // https://pastebin.com/284NtPT5
+                | After "getSkills" (Link (Contains "pastebin" & uri)) ->
+                    let skills =
+                        Impl.fromPasteBin uri
+                        |> Option.bind PathOfExile.Domain.TreeParsing.PathOfBuildingParsing.parseText
+                        |> Option.bind(fun ch ->
+                            printfn "Found a character"
+                            ch.Skills.SkillGroups
+                            |> List.filter(fun sg -> sg.IsEnabled)
+                            |> List.collect(fun sg -> sg.Gems)
+                            |> List.filter(fun g -> g.Enabled)
+                            |> List.map(fun g -> g.Name)
+                            |> List.sort
+                            |> function
+                                |[] -> None
+                                | skillNames ->
+                                    printfn "Found skill names!"
+                                    PathOfExile.Domain.TreeParsing.PathOfBuildingParsing.getGemReqLevels System.Environment.CurrentDirectory skillNames
+                                    |> Option.map(List.map(fun (n,lvlOpt)-> sprintf "%s - %s" n (Reflection.fDisplay lvlOpt)) >> Schema.BReusable.StringHelpers.delimit ",") )
+                    skills
+                    |> Option.map (fun x -> SocketMessage.reply' sm x :> Task)
+                | _ -> None
+
+            )
+
+        }
+    // passive tree
     let getClass =
         "getClass",
         {
@@ -335,7 +378,7 @@ module Exiling =
                 match sm.Content with
                 | After "getClass <" (Before ">" uri)
                 | After "getClass `" (Before "`" uri)->
-                    let reggie = Impl.regIt uri
+                    let reggie = Impl.regPassiveTree uri
                     printfn "Found uri, worked?%A, he's:%s" reggie.IsSome uri
                     reggie
                     |> Option.bind (fun _ ->
@@ -377,6 +420,7 @@ module Commandments =
             Exiling.setProfile
             Exiling.getClass
             Exiling.getStat
+            Exiling.getSkills
             Generalities.cleaning
         ]
         |> List.map(fun (x,c) ->  sprintf "!%s" x, c)

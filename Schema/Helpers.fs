@@ -50,6 +50,7 @@ module Reflection =
 module Utils =
     open System.IO
     let dump titleOpt (f:_ -> obj) (x:'t) =
+        if System.Diagnostics.Debugger.IsAttached then
             let vsCodePath = @"C:\Program Files (x86)\Microsoft VS Code\bin\code.cmd"
             if File.Exists vsCodePath then
                 // write the xml out to temp for inspection
@@ -194,6 +195,8 @@ module StringPatterns =
 
 
     // advance/pluck next quoted token
+    // expects something surrounded by ' or "
+    // passes back token, and remainder if any
     let (|Quoted|_|)=
         function
         | NonValueString _ -> None

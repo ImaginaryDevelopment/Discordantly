@@ -93,6 +93,7 @@ module PassiveJsParsing =
                 //assets:obj
                 constants:JObject
         }
+
         let getMappedNodes folderPath =
             IO.Path.Combine(folderPath,"Passives3.5.json")
             |> IO.File.ReadAllText
@@ -118,17 +119,19 @@ module PassiveJsParsing =
             let end' = if BitConverter.IsLittleEndian then Array.rev else id
             let bconv x = BitConverter.ToInt32(end' x,0)
             let bconv' x = BitConverter.ToUInt16(end' x,0) |> Convert.ToInt32
-            {
-                //bytes 0-3 contain the version
-                Version = bconv payload.[0..3] //BitConverter.ToInt32((if BitConverter.IsLittleEndian then Array.rev else id )payload.[0..3],0)
-                // bytes 4-6 contain cls, asc, full
-                CharClass= payload.[4] |> Convert.ToInt32
-                Ascendency = payload.[5] |> Convert.ToInt32
-                FullScreen = payload.[6] |> Convert.ToInt32
-                Nodes = Array.chunkBySize 2 payload.[7..] |> Array.map (bconv') |> List.ofArray
-            }
+            let result =
+                {
+                    //bytes 0-3 contain the version
+                    Version = bconv payload.[0..3] //BitConverter.ToInt32((if BitConverter.IsLittleEndian then Array.rev else id )payload.[0..3],0)
+                    // bytes 4-6 contain cls, asc, full
+                    CharClass= payload.[4] |> Convert.ToInt32
+                    Ascendency = payload.[5] |> Convert.ToInt32
+                    FullScreen = payload.[6] |> Convert.ToInt32
+                    Nodes = Array.chunkBySize 2 payload.[7..] |> Array.map (bconv') |> List.ofArray
+                }
+            result
 
-        let regIt =
+        let regPassiveTree =
             function
             | RMatch "AAAA[^?]+" m -> Some m.Value
             | _ -> None
@@ -139,7 +142,7 @@ module PassiveJsParsing =
     type Tree = {Version:int; Class:ChClass option;Nodes:Node list}
     let decodeUrl (nodes:IDictionary<int,Node>) url =
         url
-        |> regIt
+        |> regPassiveTree
         |> Option.bind(fun x ->
             try
                 x
@@ -164,7 +167,32 @@ module PassiveJsParsing =
 
 // based on https://github.com/Kyle-Undefined/PoE-Bot/blob/997a15352c83b0959da03b1f59db95e4a5df758c/Helpers/PathOfBuildingHelper.cs
 module PathOfBuildingParsing =
+    open Schema.Helpers
+
     type Gem = {SkillId:string; Name:string; Level:int; Quality:int;Enabled:bool}
+    let getSkillGems folderPath =
+        let path = IO.Path.Combine(folderPath,"Gems3.5.json")
+        if IO.File.Exists path then
+            path
+            |> IO.File.ReadAllText
+            |> SuperSerial.deserialize<Gem list>
+        else
+            eprintfn "Could not find gems file at %s" path
+            None
+        
+    let getGemReqLevels folderPath skillNames =
+        match getSkillGems folderPath with
+        | None -> None
+        | Some gems ->
+            skillNames
+            |> List.map(fun skillName ->
+                skillName,
+                    gems
+                    |> List.tryFind(fun x -> String.equalsI x.Name skillName || String.equalsI (sprintf "%s support" skillName) x.Name)
+                    |> Option.map(fun g -> g.Level)
+            )
+            |> Some
+
     type SkillGroup = {Gems:Gem list;IsEnabled:bool; Slot:string; IsSelectedGroup:bool}
     type CharacterSkills = {MainSkillIndex:int; SkillGroups: SkillGroup list} with
         member x.MainSkillGroup =
