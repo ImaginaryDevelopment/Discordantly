@@ -11,6 +11,37 @@ type NodeType =
     |Keystone
     |Mastery
     |JewelSocket
+module Gems =
+    open Schema.Helpers
+
+    type Gem = {SkillId:string; Name:string; Level:int; Quality:int;Enabled:bool}
+    let isGemNameEqual skillName (x:Gem) = String.equalsI x.Name skillName || String.equalsI (sprintf "%s support" skillName) x.Name
+    let getSkillGems folderPath =
+        let path = IO.Path.Combine(folderPath,"Gems3.5.json")
+        if IO.File.Exists path then
+            path
+            |> IO.File.ReadAllText
+            |> SuperSerial.deserialize<Gem list>
+        else
+            eprintfn "Could not find gems file at %s" path
+            None
+    let getSkillGem folderPath skillName =
+        getSkillGems folderPath
+        |> Option.bind(Seq.tryFind(isGemNameEqual skillName))
+
+    let getGemReqLevels folderPath skillNames =
+        match getSkillGems folderPath with
+        | None -> None
+        | Some gems ->
+            skillNames
+            |> List.map(fun skillName ->
+                skillName,
+                    gems
+                    |> List.tryFind(isGemNameEqual skillName)
+                    |> Option.map(fun g -> g.Level)
+            )
+            |> Some
+
 
 //// incomplete translation
 //type SkillNodeGroup() = // https://github.com/PoESkillTree/PoESkillTree/blob/f4a6119be852315ca88c63d91a1acfb5901d4b8a/WPFSKillTree/SkillTreeFiles/SkillNodeGroup.cs
@@ -168,30 +199,8 @@ module PassiveJsParsing =
 // based on https://github.com/Kyle-Undefined/PoE-Bot/blob/997a15352c83b0959da03b1f59db95e4a5df758c/Helpers/PathOfBuildingHelper.cs
 module PathOfBuildingParsing =
     open Schema.Helpers
+    open Gems
 
-    type Gem = {SkillId:string; Name:string; Level:int; Quality:int;Enabled:bool}
-    let getSkillGems folderPath =
-        let path = IO.Path.Combine(folderPath,"Gems3.5.json")
-        if IO.File.Exists path then
-            path
-            |> IO.File.ReadAllText
-            |> SuperSerial.deserialize<Gem list>
-        else
-            eprintfn "Could not find gems file at %s" path
-            None
-        
-    let getGemReqLevels folderPath skillNames =
-        match getSkillGems folderPath with
-        | None -> None
-        | Some gems ->
-            skillNames
-            |> List.map(fun skillName ->
-                skillName,
-                    gems
-                    |> List.tryFind(fun x -> String.equalsI x.Name skillName || String.equalsI (sprintf "%s support" skillName) x.Name)
-                    |> Option.map(fun g -> g.Level)
-            )
-            |> Some
 
     type SkillGroup = {Gems:Gem list;IsEnabled:bool; Slot:string; IsSelectedGroup:bool}
     type CharacterSkills = {MainSkillIndex:int; SkillGroups: SkillGroup list} with

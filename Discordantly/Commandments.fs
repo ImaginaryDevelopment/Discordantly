@@ -284,7 +284,10 @@ module Exiling =
         | RMatchGroup @"(http[^ ]+)(\s|$)" 1 uri ->
             Some uri
         | _ -> None
-    
+    module PassiveParsing = PathOfExile.Domain.TreeParsing.PassiveJsParsing
+    module PoB = PathOfExile.Domain.TreeParsing.PathOfBuildingParsing
+    module Gems = PathOfExile.Domain.TreeParsing.Gems
+    let contentPath = System.Environment.CurrentDirectory
     let getStat =
         "getStat",
         {
@@ -295,7 +298,7 @@ module Exiling =
                 // get just the count of available nodes with that stat
                 | After "getStat " (Quoted (ValueString stat,Link uri)) ->
                     printfn "we have a full get stat request"
-                    match getMappedNodes System.Environment.CurrentDirectory with
+                    match getMappedNodes contentPath with
                     | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
                     | Some nc ->
                         printfn "node information found"
@@ -304,7 +307,7 @@ module Exiling =
                         //    | "Spell Damage" ->
                         //        "% increased Spell Damage"
                         //    | _ -> stat
-                        match PathOfExile.Domain.TreeParsing.PassiveJsParsing.decodeUrl nc.nodes uri with
+                        match PassiveParsing.decodeUrl nc.nodes uri with
                         | None -> Some(SocketMessage.reply' sm "Tree decoding failed" :> Task)
                         | Some treeInfo ->
                             printfn "Conducting Search"
@@ -318,7 +321,7 @@ module Exiling =
                             Some(SocketMessage.reply' sm <| sprintf "Found %i nodes with %s in the tree" count stat :> Task)
                 | After "getStat " (Quoted (ValueString stat,_))
                 | After "getStat " (Quoted (ValueString stat,_)) ->
-                    match getMappedNodes System.Environment.CurrentDirectory with
+                    match getMappedNodes contentPath with
                     | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
                     | Some nc ->
                         let search =
@@ -340,14 +343,19 @@ module Exiling =
     // find a build's enabled skills along with minimum level to equip
     let getSkills =
         "getSkills",
-        {   TriggerHelp=[]
+        {   TriggerHelp=[
+                "Examples:"
+                "getSkills <pastebin uri>"
+                "getSkills 'Brutality'"
+            ]
             F= Complex (fun cp sm ->
                 match sm.Content with
                 // https://pastebin.com/284NtPT5
+                | After "getSkill" (Link (Contains "pastebin" & uri))
                 | After "getSkills" (Link (Contains "pastebin" & uri)) ->
                     let skills =
                         Impl.fromPasteBin uri
-                        |> Option.bind PathOfExile.Domain.TreeParsing.PathOfBuildingParsing.parseText
+                        |> Option.bind PoB.parseText
                         |> Option.bind(fun ch ->
                             printfn "Found a character"
                             ch.Skills.SkillGroups
@@ -360,10 +368,24 @@ module Exiling =
                                 |[] -> None
                                 | skillNames ->
                                     printfn "Found skill names!"
-                                    PathOfExile.Domain.TreeParsing.PathOfBuildingParsing.getGemReqLevels System.Environment.CurrentDirectory skillNames
+                                    PathOfExile.Domain.TreeParsing.Gems.getGemReqLevels contentPath skillNames
                                     |> Option.map(List.map(fun (n,lvlOpt)-> sprintf "%s - %s" n (Reflection.fDisplay lvlOpt)) >> Schema.BReusable.StringHelpers.delimit ",") )
                     skills
                     |> Option.map (fun x -> SocketMessage.reply' sm x :> Task)
+                | After "getSkill" (Quoted(skillName,NonValueString _))
+                | After "getSkills" (Quoted(skillName,NonValueString _)) ->
+                    Gems.getSkillGem contentPath skillName
+                    |> function
+                        |None ->
+                            sprintf "Could not locate a skill named %s" skillName
+                            |> SocketMessage.reply' sm
+                        |Some g ->
+                            sprintf "%s - %i" g.Name g.Level
+                            |> SocketMessage.reply' sm
+                        :> Task
+                        |> Some
+
+                        
                 | _ -> None
 
             )
