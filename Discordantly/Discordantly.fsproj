@@ -6,6 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="CommandSchema.fs" />
+    <Compile Include="PoBCommandAdapter.fs" />
     <Compile Include="Commandments.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

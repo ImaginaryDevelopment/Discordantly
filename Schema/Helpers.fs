@@ -76,6 +76,29 @@ module Utils =
                 System.Diagnostics.Process.Start(vsCodePath,tmp)
                 |> ignore
 
+module Async =
+    let map f x =
+        async{
+            let! x = x
+            return f x
+        }
+    let bind f x =
+        async{
+            let! x = x
+            let! x = f x
+            return x
+        }
+    let flatten (seqs:Async<_> seq) =
+        async{
+            let items = ResizeArray<_>()
+            for a in seqs do
+                let! x = a
+                items.Add x
+            return items :> seq<_>
+        }
+
+
+
 // http://www.fssnip.net/hv/title/Extending-async-with-await-on-tasks
 type Microsoft.FSharp.Control.AsyncBuilder with
     member x.Bind(t:System.Threading.Tasks.Task<'t>, f:'t -> Async<'r>) : Async<'r> =
@@ -94,18 +117,6 @@ type Microsoft.FSharp.Control.AsyncBuilder with
     //member __.For(e:IAsyncEnumerable<IEnumerable<'t>>,f) = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ForEachAsync(Action<_>(f))
     member __.For(e:IAsyncEnumerable<IReadOnlyCollection<'t>>,f) = e.SelectMany(fun y -> y.ToAsyncEnumerable()).ForEach(Action<_>(f))
 
-module Async =
-    let map f x =
-        async{
-            let! x = x
-            return f x
-        }
-    let bind f x =
-        async{
-            let! x = x
-            let! x = f x
-            return x
-        }
 
 module SuperSerial =
     open Newtonsoft.Json

@@ -9,6 +9,7 @@ open Discord
 
 open Discordantly
 open Discordantly.Commandments
+open CommandSchema
 
 let logAsync msg : Task =
     printfn "%A" msg
@@ -53,7 +54,7 @@ let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
                 ()
             | Simpleton lines ->
                 send lines
-            | NotSimpleton (cmdName, help, Complex f) ->
+            | NotSimpleton (cmdName, help, ReplyType.Complex f) ->
                 match f (ClientProxy client) sm with
                 | Some r -> r |> ignore<Task>
                 | None ->
@@ -61,7 +62,9 @@ let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
                     |> send
 
             | NotSimpleton (_cmdName, _help, Multiple lines) ->
-                SocketMessage.reply sm (lines |> List.map MessageLifeType.Keepsies)
+                sendMessagesAsync sm lines
+                |> Async.Ignore
+                |> Async.Start
                 |> ignore
             | NotSimpleton (_cmdName, _, _) ->
                 send ["Tell my creator he needs to learn how to code better"]

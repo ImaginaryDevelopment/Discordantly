@@ -6,95 +6,14 @@ open Schema.BReusable
 open Schema.Helpers
 open Schema.Helpers.StringPatterns
 
-open Discord.WebSocket
 open Discord
+open Discord.WebSocket
 
-// exposes only things the bot commands should have access to
-type ClientProxy(client:DiscordSocketClient) =
-    member __.CurrentUser = client.CurrentUser
-    member __.LoginState = client.LoginState
-    member __.DMChannels = client.DMChannels
-    member __.ShardId = client.ShardId
-    member __.Latency = client.Latency
-    member __.SetStatusAsync user = client.SetStatusAsync user
-    member __.GetUser id = client.GetUser(id=id)
-    member __.GetUser (username, discriminator) = client.GetUser(username, discriminator)
-type MessageLifeType =
-    | Keepsies of string
-    | Deletesies of string
-
-module SocketMessage =
-    open Discord.Rest
-
-    type AsyncReplyWrapper = {RestUserMessage:Rest.RestUserMessage; DeleteMe:bool}
-    let deleteAndReply (sm:SocketMessage) (txt:string):Task<_> =
-        async{
-            do! Async.AwaitTask(sm.DeleteAsync())
-            return sm.Channel.SendMessageAsync(txt)
-        }
-        |> Async.StartAsTask
-
-    let reply' (sm:SocketMessage) (txt:string):Task<_>=
-        upcast sm.Channel.SendMessageAsync txt
-    let reply(sm:SocketMessage) (txt:MessageLifeType list) :Task<_> =
-        let single x :Async<AsyncReplyWrapper list> =
-            async {
-                let (deleteMe,x) =
-                    match x with
-                    | Keepsies x ->
-                        false, x
-                    | Deletesies x ->
-                        true, x
-                let! msg = sm.Channel.SendMessageAsync x
-                return [{RestUserMessage = msg; DeleteMe = deleteMe}]
-            }
-        match txt with
-        | [] -> single (Keepsies "Tell my creator that, due to creative differences, I will not reply to that message")
-        | x::[] -> single x
-        | replies ->
-            async{
-                let mutable items = List.empty
-                for r in replies do
-                    let deleteMe,txt =
-                        match r with
-                        | Keepsies txt ->
-                            false, txt
-                        | Deletesies txt ->
-                            true, txt
-                    let! result = sm.Channel.SendMessageAsync txt
-                    items <- {RestUserMessage=result; DeleteMe=deleteMe} :: items
-                    do! Async.Sleep 600
-                return items
-            }
-        |> fun pipe ->
-            async{
-                let! items = pipe
-                match items |> List.choose(fun m -> if m.DeleteMe then Some m.RestUserMessage else None) with
-                | [] ->
-                    return items
-                | x ->
-                    do! Async.Sleep 5000
-                    x |> List.map(fun x -> x.DeleteAsync())
-                    |> List.iter (Async.AwaitTask>>ignore)
-                    return items
-            }
-            |> Async.StartAsTask
+open CommandSchema
 
 
     //abstract member () ()
 // [<NoSubstitute("for you")>]
-[<NoEquality;NoComparison>]
-type ReplyType =
-    | Simple of string
-    | Multiple of string list
-    //| Complex of (ClientProxy -> SocketMessage -> Task<Rest.RestUserMessage list> option)
-    | Complex of (ClientProxy -> SocketMessage -> Task option)
-type TriggerType =
-    | Command of string
-    | Method of beginsWith:string
-
-type Command = {Trigger:string;ReplyType:ReplyType}
-type NotSimple = {TriggerHelp:string list;F:ReplyType}
 
 module Generalities =
     open System.Collections.Generic
@@ -158,18 +77,18 @@ module Exiling =
                         Some (u,profileName)
                     else None
                 )
-        let onProfileSearch: _ -> MessageLifeType list=
+        let onProfileSearch: _ -> string list=
             function
                 | un, Some(_user,pn) ->
                     let baseResponse =
-                        [   Keepsies <| sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
-                            Keepsies <| sprintf "You just got served <https://www.pathofexile.com/account/view-profile/%s/characters>" pn
+                        [   sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
+                            sprintf "You just got served <https://www.pathofexile.com/account/view-profile/%s/characters>" pn
                         ]
                     //get character list somehow?
                     async{
                         match! PathOfExile.Domain.HtmlParsing.getCharacters pn with
                         | HtmlParsing.GetResult.FailedDeserialize ->
-                            return baseResponse@[Keepsies <| sprintf "Could not find characters"]
+                            return baseResponse@[sprintf "Could not find characters"]
                         | HtmlParsing.GetResult.Success chars ->
                             let lines =
                                 chars
@@ -177,15 +96,14 @@ module Exiling =
                                 //|> Seq.map(fun (_,x) -> x |> Seq.maxBy(fun c -> c.Level))
                                 |> Seq.sortBy(fun x -> x.League = "Standard", x.Level)
                                 |> Seq.map(fun x -> sprintf "%s Lvl %i %s - %s League" x.Name x.Level x.Class x.League)
-                                |> Seq.map Keepsies
                                 |> List.ofSeq
                             return baseResponse@lines
                         | HtmlParsing.GetResult.FailedHttp msg ->
-                            return baseResponse@[Keepsies <| sprintf "Failed to fetch characters: %s" msg]
+                            return baseResponse@[sprintf "Failed to fetch characters: %s" msg]
                     }
                     |> Async.RunSynchronously
                 | un, None ->
-                        [Keepsies <| sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
+                        [sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
 
         // trimming the end in case there were stray spaces
         let (|ProfileName|_|) =
@@ -220,18 +138,11 @@ module Exiling =
                 "setProfile @userName '[account name]'"
             ]
             F=
-                let replySet sm username profileName =
+                let replySet (sm:SocketMessage) username profileName =
                     async {
-                        do!
-                            [Keepsies <| sprintf "I set `%s`'s poeprofile name to `%s`. I hope you capitalized it properly." username profileName]
-                            |> SocketMessage.reply sm
-                            |> Async.AwaitTask
-                            |> Async.Ignore
-                        do!
-                            [Keepsies <| sprintf "I am growing, and I think I'll remember this, but I may forget."]
-                            |> SocketMessage.reply sm
-                            |> Async.AwaitTask
-                            |> Async.Ignore
+                        let! _ = sm.Channel.SendMessageAsync(sprintf "I set `%s`'s poeprofile name to `%s`. I hope you capitalized it properly." username profileName)
+                        let! _ = sendMessageAsync sm <| sprintf "I am growing, and I think I'll remember this, but I may forget."
+                        ()
                     }
                     |> Async.Ignore
                     |> Async.StartAsTask
@@ -248,7 +159,7 @@ module Exiling =
                             |> Map.add targetUser.Id accountName
                         replySet sm targetUser.Username accountName
                     else
-                        SocketMessage.reply' sm "unable to understand your comment, mention the user then the profile name in ''"
+                        sendMessageAsync sm "unable to understand your comment, mention the user then the profile name in ''"
                         :> Task
                         |> Some
                 | AfterI "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
@@ -260,7 +171,9 @@ module Exiling =
                 | RMatchI "setProfile$" _ ->
                     (sm.Author.Username, Impl.Profiling.findExileUser cp sm.Author.Username)
                     |> onProfileSearch
-                    |> SocketMessage.reply sm
+                    |> sendMessagesAsync sm
+                    |> Async.Ignore
+                    |> Async.StartAsTask
                     :> Task
                     |> Some
                 | _ -> None
@@ -279,19 +192,16 @@ module Exiling =
                 let serveProfile sm cp userName =
                     (userName,Impl.Profiling.findExileUser cp userName)
                     |> onProfileSearch
-                    |> SocketMessage.reply sm
+                    |> sendMessagesAsync sm
+                    |> Async.Ignore
+                    |> Async.StartAsTask
                     :> Task
                     |> Some
                 Complex (fun cp sm ->
                     match sm.Content with
                     | AfterI "getProfiles" (NonValueString _) ->
-                        let exiles =
-                            Impl.Profiling.profiles.Value
-                            |> Map.toSeq
-                            |> Seq.map(fun (x,y)->cp.GetUser x |> fun u -> u.Username,y)
-                        async {
-                            let! _ = sm.Channel.SendMessageAsync "For more information use getProfile [username]"
-                            for (u,pn) in exiles do
+                        let getUserInfo u pn =
+                            async{
                                 let! msg = sm.Channel.SendMessageAsync <| sprintf "%s is Exile %s" u pn
                                 match! HtmlParsing.getCharacters pn with
                                 | HtmlParsing.GetResult.FailedDeserialize -> ()
@@ -329,6 +239,18 @@ module Exiling =
                                     | None -> ()
                                 | HtmlParsing.GetResult.FailedHttp msg ->
                                     eprintfn"Failed to get characters for %s(%s): %s" u pn msg
+                            }
+                        let exiles =
+                            Impl.Profiling.profiles.Value
+                            |> Map.toSeq
+                            |> Seq.map(fun (x,y)-> cp.GetUser x |> fun u -> u.Username,y)
+                        async {
+                            let! _ = sm.Channel.SendMessageAsync "For more information use getProfile [username]"
+                            exiles
+                            |> Seq.map(fun (u,pn) -> getUserInfo u pn)
+                            |> Async.Parallel
+                            |> Async.Ignore
+                            |> Async.Start
                         }
                         |> Async.StartAsTask
                         :> Task
@@ -340,7 +262,9 @@ module Exiling =
                         serveProfile sm cp userName
                     | RMatch "getProfile\s*$" _ ->
                         getAuthorProfile sm.Author cp
-                        |> SocketMessage.reply sm
+                        |> sendMessagesAsync sm
+                        |> Async.Ignore
+                        |> Async.StartAsTask
                         :> Task
                         |> Some
                     | _ -> None
@@ -352,18 +276,8 @@ module Exiling =
             nodeCache <- Some nc
             Some nc
         | None -> None
-    let (|Link|_|) =
-        function 
-        | After "<" (Before ">" uri)
-        | After "`"(Before "`" uri)
-        // this allows links that haven't had previews shut off by surrounding tokens
-        | RMatchGroup @"(http[^ ]+)(\s|$)" 1 uri ->
-            Some uri
-        | _ -> None
     module PassiveParsing = PathOfExile.Domain.TreeParsing.PassiveJsParsing
-    module PoB = PathOfExile.Domain.TreeParsing.PathOfBuildingParsing
     module Gems = PathOfExile.Domain.TreeParsing.Gems
-    let contentPath = System.Environment.CurrentDirectory
     let getStat =
         "getStat",
         {
@@ -375,7 +289,7 @@ module Exiling =
                 | After "getStat " (Quoted (ValueString stat,Link uri)) ->
                     printfn "we have a full get stat request"
                     match getMappedNodes contentPath with
-                    | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
+                    | None -> Some(sendMessageAsync sm "No node information available" :> Task)
                     | Some nc ->
                         printfn "node information found"
                         let search = stat
@@ -384,7 +298,7 @@ module Exiling =
                         //        "% increased Spell Damage"
                         //    | _ -> stat
                         match PassiveParsing.decodeUrl nc.nodes uri with
-                        | None -> Some(SocketMessage.reply' sm "Tree decoding failed" :> Task)
+                        | None -> Some(sendMessageAsync sm "Tree decoding failed" :> Task)
                         | Some treeInfo ->
                             printfn "Conducting Search"
                             let relevantValues=
@@ -394,11 +308,11 @@ module Exiling =
                                 |> List.ofSeq
                             printfn "Search completed"
                             let count = relevantValues.Length
-                            Some(SocketMessage.reply' sm <| sprintf "Found %i nodes with %s in the tree" count stat :> Task)
+                            Some(sendMessageAsync sm <| sprintf "Found %i nodes with %s in the tree" count stat :> Task)
                 | After "getStat " (Quoted (ValueString stat,_))
                 | After "getStat " (Quoted (ValueString stat,_)) ->
                     match getMappedNodes contentPath with
-                    | None -> Some(SocketMessage.reply' sm "No node information available" :> Task)
+                    | None -> Some(sendMessageAsync sm "No node information available" :> Task)
                     | Some nc ->
                         let search =
                             match stat with
@@ -411,63 +325,12 @@ module Exiling =
                             |> Seq.filter (fun x -> x.EndsWith search)
                             |> List.ofSeq
                         let count = relevantValues.Length
-                        Some(SocketMessage.reply' sm <| sprintf "Found %i nodes with %s" count stat :> Task)
+                        Some(sendMessageAsync sm <| sprintf "Found %i nodes with %s" count stat :> Task)
                 | _ -> None
 
             )
         }
-    // find a build's enabled skills along with minimum level to equip
-    let getSkills =
-        "getSkills",
-        {   TriggerHelp=[
-                "Examples:"
-                "getSkills <pastebin uri>"
-                "getSkills 'Brutality'"
-            ]
-            F= Complex (fun cp sm ->
-                match sm.Content with
-                // https://pastebin.com/284NtPT5
-                | After "getSkill" (Link (Contains "pastebin" & uri))
-                | After "getSkills" (Link (Contains "pastebin" & uri)) ->
-                    let skills =
-                        Impl.fromPasteBin uri
-                        |> Option.bind PoB.parseText
-                        |> Option.bind(fun ch ->
-                            printfn "Found a character"
-                            ch.Skills.SkillGroups
-                            |> List.filter(fun sg -> sg.IsEnabled)
-                            |> List.collect(fun sg -> sg.Gems)
-                            |> List.filter(fun g -> g.Enabled)
-                            |> List.map(fun g -> g.Name)
-                            |> List.sort
-                            |> function
-                                |[] -> None
-                                | skillNames ->
-                                    printfn "Found skill names!"
-                                    PathOfExile.Domain.TreeParsing.Gems.getGemReqLevels contentPath skillNames
-                                    |> Option.map(List.map(fun (n,lvlOpt)-> sprintf "%s - %s" n (Reflection.fDisplay lvlOpt)) >> Schema.BReusable.StringHelpers.delimit ",") )
-                    skills
-                    |> Option.map (fun x -> SocketMessage.reply' sm x :> Task)
-                | After "getSkill" (Quoted(skillName,NonValueString _))
-                | After "getSkills" (Quoted(skillName,NonValueString _)) ->
-                    Gems.getSkillGem contentPath skillName
-                    |> function
-                        |None ->
-                            sprintf "Could not locate a skill named %s" skillName
-                            |> SocketMessage.reply' sm
-                        |Some g ->
-                            sprintf "%s - %i" g.Name g.Level
-                            |> SocketMessage.reply' sm
-                        :> Task
-                        |> Some
-
-                        
-                | _ -> None
-
-            )
-
-        }
-    // passive tree
+   // passive tree
     let getClass =
         "getClass",
         {
@@ -486,12 +349,13 @@ module Exiling =
                     |> Option.bind(fun tree -> tree.Class)
                     |> Option.map(fun x ->
                             let display = Reflection.fDisplay x
-                            SocketMessage.reply' sm <| display
+                            sendMessageAsync sm <| display
                             :> Task
                     )
                 | After "getClass " _ ->
                     sprintf "@%s !getClass uri must be surrounded by <> or `" sm.Author.Username
-                    |> SocketMessage.deleteAndReply sm 
+                    //|> SocketMessage.deleteAndReply sm 
+                    |> sendMessageAsync  sm
                     :> Task
                     |> Some
                 | _ -> None
@@ -518,7 +382,7 @@ module Commandments =
             Exiling.setProfile
             Exiling.getClass
             Exiling.getStat
-            Exiling.getSkills
+            PoBCommandAdapter.getSkills
             Generalities.cleaning
         ]
         |> List.map(fun (x,c) ->  sprintf "!%s" x, c)
