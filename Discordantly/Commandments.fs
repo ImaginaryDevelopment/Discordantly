@@ -130,6 +130,8 @@ module Exiling =
     open Schema.Helpers.StringPatterns
     type private ExileMap = Map<uint64,string>
     module Impl =
+        open PathOfExile.Domain
+
         type LikeAProperty<'t>(initialValue:'t,fSideEffect) =
             let mutable value = initialValue
             member __.Value
@@ -140,7 +142,7 @@ module Exiling =
 
         module Profiling =
 
-            let profiles = 
+            let profiles =
                 let get,set =
                     Storage.createGetSet<ExileMap> "Exiling"
                 let v =
@@ -156,12 +158,32 @@ module Exiling =
                         Some (u,profileName)
                     else None
                 )
-        let onProfileSearch =
+        let onProfileSearch: _ -> MessageLifeType list=
             function
                 | un, Some(_user,pn) ->
+                    let baseResponse =
                         [   Keepsies <| sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
                             Keepsies <| sprintf "You just got served <https://www.pathofexile.com/account/view-profile/%s/characters>" pn
                         ]
+                    //get character list somehow?
+                    async{
+                        match! PathOfExile.Domain.HtmlParsing.getCharacters pn with
+                        | HtmlParsing.GetResult.FailedDeserialize ->
+                            return baseResponse@[Keepsies <| sprintf "Could not find characters"]
+                        | HtmlParsing.GetResult.Success chars ->
+                            let lines =
+                                chars
+                                //|> Seq.groupBy(fun x -> x.League)
+                                //|> Seq.map(fun (_,x) -> x |> Seq.maxBy(fun c -> c.Level))
+                                |> Seq.sortBy(fun x -> x.League = "Standard", x.Level)
+                                |> Seq.map(fun x -> sprintf "%s Lvl %i %s - %s League" x.Name x.Level x.Class x.League)
+                                |> Seq.map Keepsies
+                                |> List.ofSeq
+                            return baseResponse@lines
+                        | HtmlParsing.GetResult.FailedHttp msg ->
+                            return baseResponse@[Keepsies <| sprintf "Failed to fetch characters: %s" msg]
+                    }
+                    |> Async.RunSynchronously
                 | un, None ->
                         [Keepsies <| sprintf "♪ My baloney has a first name ♪, however %s, does not." un]
 
@@ -187,6 +209,7 @@ module Exiling =
     open PathOfExile.Domain.TreeParsing.PassiveJsParsing
     open PathOfExile.Domain.TreeParsing.PathOfBuildingParsing
     open Schema.Helpers
+    module HtmlParsing = PathOfExile.Domain.HtmlParsing
 
 
     let setProfile:string*NotSimple =
@@ -247,7 +270,11 @@ module Exiling =
     let getProfile:string*NotSimple=
         "getProfile",
         {
-            TriggerHelp=["`getProfile` help - alone it will get your own";"or specify a username to get another user's profile if they have one"]
+            TriggerHelp=[
+                "`getProfile` help - alone it will get your own"
+                "or specify a username to get another user's profile if they have one"
+                "`getProfiles` - list users with profiles"
+            ]
             F=
                 let serveProfile sm cp userName =
                     (userName,Impl.Profiling.findExileUser cp userName)
@@ -257,6 +284,55 @@ module Exiling =
                     |> Some
                 Complex (fun cp sm ->
                     match sm.Content with
+                    | AfterI "getProfiles" (NonValueString _) ->
+                        let exiles =
+                            Impl.Profiling.profiles.Value
+                            |> Map.toSeq
+                            |> Seq.map(fun (x,y)->cp.GetUser x |> fun u -> u.Username,y)
+                        async {
+                            let! _ = sm.Channel.SendMessageAsync "For more information use getProfile [username]"
+                            for (u,pn) in exiles do
+                                let! msg = sm.Channel.SendMessageAsync <| sprintf "%s is Exile %s" u pn
+                                match! HtmlParsing.getCharacters pn with
+                                | HtmlParsing.GetResult.FailedDeserialize -> ()
+                                | HtmlParsing.GetResult.Success chars ->
+                                    let highlightChar =
+                                        chars
+                                        //|> Seq.filter(fun ch -> StringHelpers.containsI "Standard" ch.League|> not)
+                                        |> Seq.fold(fun highOpt char ->
+                                            match highOpt with
+                                            | None -> Some char
+                                            | Some ({League=ContainsI "standard"} as x) when char.League |> StringHelpers.containsI "standard" ->
+                                                if(char.Level > x.Level) then
+                                                    Some char
+                                                else Some x
+                                            | Some {League=ContainsI "standard"} -> Some char
+                                            // all standard comparison are done, league only from here on out
+                                            | Some x ->
+                                                if StringHelpers.containsI "standard" char.League then
+                                                    Some x
+                                                elif char.Level > x.Level then
+                                                    Some char
+                                                else Some x
+                                        ) None
+                                    match highlightChar with
+                                    | Some char ->
+                                        let msg':Rest.RestUserMessage = msg
+                                        let f (mp:MessageProperties):unit=
+                                            let txt = sprintf "%s is %s (%s - %i %s)" u pn char.Name char.Level char.League
+                                            mp.Content <- Optional<string> txt
+                                            ()
+                                        let f' = System.Action<_>(f)
+
+                                        let! _ = Async.AwaitTask(msg'.ModifyAsync(func=f',options=null))
+                                        ()
+                                    | None -> ()
+                                | HtmlParsing.GetResult.FailedHttp msg ->
+                                    eprintfn"Failed to get characters for %s(%s): %s" u pn msg
+                        }
+                        |> Async.StartAsTask
+                        :> Task
+                        |> Some
                     | ContainsI "getProfile" when sm.MentionedUsers.Count = 1 ->
                         let un = sm.MentionedUsers |> Seq.head
                         serveProfile sm cp un.Username
