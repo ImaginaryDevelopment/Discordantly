@@ -1,6 +1,6 @@
 Discordantly
 
-A bot for helping discord users look each other's profiles up, and other Path of Exile related functionality
+A bot for helping discord users look each other's profiles up, and other Path of Exile related functionality. The bot will ignore any input in any channel not containg the word 'bot' so as not to spam up regular channels.
 
 ## Commands
  - !getHelp - lists commands and any other questionably helpful information
@@ -14,5 +14,4 @@ A bot for helping discord users look each other's profiles up, and other Path of
  - !getSkills '\[skill name]' - gets the required level to use the skill
  - !getSkills \[Pastebin PoB url] - gets the active skill names in a build, with the level required to use them
  - !maidservice - clean up all the bot's text and user issued-commands (if the bot has permission to do so in that channel)
- 
- 
+  
