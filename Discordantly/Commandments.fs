@@ -44,6 +44,31 @@ module Generalities =
                 | _ -> None
             )
         }
+    let getEmbed:string*NotSimple =
+        "getEmbed",
+        {
+            TriggerHelp=[
+                "getEmbed - hello world - embed version"
+            ]
+            F= Complex (fun cp sm ->
+                async{
+                    let! msg = sm.Channel.SendMessageAsync("Are you sure? Ok, let's embed")
+                    let msg : Rest.RestUserMessage = msg
+                    let emb =
+                        let emf = 
+                            EmbedFieldBuilder(Name="MyFirstTimeEmbed", Value="was it good?")
+                        EmbedBuilder()
+                            .AddField(emf)
+                    let! _ = msg.ModifyAsync(fun mp ->
+                        mp.Embed <- Optional <| emb.Build()
+                    )
+                    ()
+                }
+                |> Async.StartAsTask
+                :> Task
+                |> Some
+            )
+        }
 // profile tracking, etc
 module Exiling =
     open Schema.Helpers.StringPatterns
@@ -127,7 +152,6 @@ module Exiling =
     open PathOfExile.Domain.TreeParsing.PathOfBuildingParsing
     open Schema.Helpers
     module HtmlParsing = PathOfExile.Domain.HtmlParsing
-
 
     let setProfile:string*NotSimple =
         "setProfile",
@@ -380,6 +404,7 @@ module Commandments =
 
     let notSimpleReplies : Map<string, NotSimple>=
         [
+            Generalities.getEmbed
             Exiling.getProfile
             Exiling.setProfile
             Exiling.getClass
