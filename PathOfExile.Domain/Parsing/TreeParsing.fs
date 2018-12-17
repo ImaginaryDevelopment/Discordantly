@@ -110,6 +110,8 @@ module PassiveJsParsing =
                 passivePointsGranted:int
                 isMultipleChoiceOption:bool
         }
+
+        [<NoComparison>]
         type PassiveLookup = {
                 root:JObject
                 max_x:int
@@ -212,6 +214,7 @@ module PathOfBuildingParsing =
     type Item = {Id:int; Raw:string}
     type ItemSlot = {Name:string; Id:int}
     type MinionSummary = MinionSummary
+    [<NoComparison>]
     type Character = {Level:int; Class:string;Ascendancy:string; AuraCount:int; Config:string; CurseCount:int; Items:Item seq; ItemSlots:ItemSlot seq ; Summary:Summary; MinionSummary:MinionSummary;Skills:CharacterSkills;Tree:string}
 
     module Impl =

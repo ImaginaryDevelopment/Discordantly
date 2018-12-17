@@ -84,7 +84,6 @@ module Exiling =
                         [   sprintf "♫ %s has a path name it's O.S.C.A.R. ♫ Wait. No. My bad. It's %s" un pn
                             sprintf "You just got served <https://www.pathofexile.com/account/view-profile/%s/characters>" pn
                         ]
-                    //get character list somehow?
                     async{
                         match! PathOfExile.Domain.HtmlParsing.getCharacters pn with
                         | HtmlParsing.GetResult.FailedDeserialize ->
@@ -243,11 +242,13 @@ module Exiling =
                         let exiles =
                             Impl.Profiling.profiles.Value
                             |> Map.toSeq
-                            |> Seq.map(fun (x,y)-> cp.GetUser x |> fun u -> u.Username,y)
+                            |> Seq.map(fun (x,y)-> cp.GetUser x |> fun u -> u.Id, u.Username,y)
                         async {
                             let! _ = sm.Channel.SendMessageAsync "For more information use getProfile [username]"
+                            let! channelUsers = sm.Channel.GetUsersAsync()
                             exiles
-                            |> Seq.map(fun (u,pn) -> getUserInfo u pn)
+                            |> Seq.filter(fun (uid,_,_) -> channelUsers |> Seq.exists(fun cu -> cu.Id = uid))
+                            |> Seq.map(fun (_,u,pn) -> getUserInfo u pn)
                             |> Async.Parallel
                             |> Async.Ignore
                             |> Async.Start
