@@ -20,7 +20,7 @@ let readyAsync():Task =
     Task.CompletedTask
 
 let printMessgMeta (sm:SocketMessage) =
-    // hey look at Discord.net's horrible you need to cast something to check if it has properties. No SOLID here, un uh.
+    // hey look at Discord.net's horrible you need to cast something to check if it has properties. No SOLID or discoverability here, un uh.
     match sm.Channel with
     | :? SocketGuildChannel as sgc ->
         printfn "Msg! %s:%s:%A:%s" sgc.Guild.Name sm.Channel.Name sm.Source sm.Author.Username
