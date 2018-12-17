@@ -1,5 +1,6 @@
 ﻿module PoBCommandAdapter
 
+open System
 open System.Threading.Tasks
 
 open Schema.BReusable
@@ -34,14 +35,27 @@ let getSkills =
                         |> List.filter(fun sg -> sg.IsEnabled)
                         |> List.collect(fun sg -> sg.Gems)
                         |> List.filter(fun g -> g.Enabled)
-                        |> List.map(fun g -> g.Name)
-                        |> List.sort
+                        // if we did not manage to find a name (probably an item provided skill, not a skill gem)
+                        |> List.sortBy(function |{Name=NonValueString _} as x -> sprintf "ZzZ%s" x.SkillId |x -> x.Name)
+                        |> List.map(function |{Name=NonValueString _} as x -> x.SkillId | x -> x.Name)
+                        |> List.groupBy id
+                        |> List.map(fun (name,v) -> name, v |> Seq.length)
                         |> function
                             |[] -> None
-                            | skillNames ->
+                            | skills ->
                                 printfn "Found skill names!"
+                                let skillNames = skills |> List.map fst
+                                let skills = skills |> Map.ofList
                                 PathOfExile.Domain.TreeParsing.Gems.getGemReqLevels contentPath skillNames
-                                |> Option.map(List.map(fun (n,lvlOpt)-> sprintf "%s - %s" n (Reflection.fDisplay lvlOpt)) >> Schema.BReusable.StringHelpers.delimit ",") )
+                                |> Option.map(
+                                    List.map(fun (n,lvlOpt) ->
+                                        let suffix =
+                                            if skills.ContainsKey n && skills.[n] > 1 then
+                                                sprintf "(%i)" skills.[n]
+                                            else String.Empty
+
+                                        sprintf "%s%s - %s" n suffix (Reflection.fDisplay lvlOpt))
+                                    >> Schema.BReusable.StringHelpers.delimit ",") )
                 skills
                 |> Option.map (fun x -> sendMessageAsync sm x :> Task)
             | After "getSkill" (Quoted(skillName,NonValueString _))
