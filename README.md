@@ -21,6 +21,7 @@ A bot for helping discord users look each other's profiles up, and other Path of
  - And/Or contact me in game - copy and paste this into your game - `@whisper IveBeenImpaled Hi, I want to talk about your discord bot`
  
 ## Related Repositories
+ - C# discord bot enabling library - https://github.com/RogueException/Discord.Net
  - Python - Path of Exile related non-bot code - https://github.com/FWidm/poe-profile/
  - C# Path of Exile discord bot (different focus and way more functionality thus far) - https://github.com/Kyle-Undefined/PoE-Bot/
  - C# Unexplored discord bot example - https://github.com/Yucked/CL4P-TP
