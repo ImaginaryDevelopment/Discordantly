@@ -14,14 +14,17 @@
     <Compile Include="Classes.fs" />
     <Compile Include="Parsing\TreeParsing.fs" />
     <Compile Include="Parsing\HtmlParsing.fs" />
+    <Compile Include="Program.fs" />
+    <None Include="GetCharacters.linq" />
     <Content Include="Gems3.5.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Passives3.5.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Compile Include="Program.fs" />
   </ItemGroup>
+
+  <ItemGroup />
 
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.8.11" />
