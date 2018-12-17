@@ -15,3 +15,5 @@ A bot for helping discord users look each other's profiles up, and other Path of
  - !getSkills \[Pastebin PoB url] - gets the active skill names in a build, with the level required to use them
  - !maidservice - clean up all the bot's text and user issued-commands (if the bot has permission to do so in that channel)
   
+## Contributing
+ - Compile and add the bot to your server - instructions for adding a discord bot: https://discordpy.readthedocs.io/en/rewrite/discord.html
