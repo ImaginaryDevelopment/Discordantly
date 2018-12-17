@@ -38,8 +38,7 @@ module Generalities =
                                     printfn "I finished one?"
                         }
                     //sm.Channel.CachedMessages
-                    Async.StartAsTask a
-                    :> Task
+                    a
                     |> Some
                 | _ -> None
             )
@@ -64,8 +63,6 @@ module Generalities =
                     )
                     ()
                 }
-                |> Async.StartAsTask
-                :> Task
                 |> Some
             )
         }
@@ -168,8 +165,6 @@ module Exiling =
                         ()
                     }
                     |> Async.Ignore
-                    |> Async.StartAsTask
-                    :> Task
                     |> Some
                 Complex (fun cp sm ->
                 match sm.Content with
@@ -183,7 +178,7 @@ module Exiling =
                         replySet sm targetUser.Username accountName
                     else
                         sendMessageAsync sm "unable to understand your comment, mention the user then the profile name in ''"
-                        :> Task
+                        |> Async.Ignore
                         |> Some
                 | AfterI "setProfile " (RMatchGroup "\w.+$" 0 (Trim profileName)) ->
                     printfn "Running setProfile ..."
@@ -196,8 +191,6 @@ module Exiling =
                     |> onProfileSearch
                     |> sendMessagesAsync sm
                     |> Async.Ignore
-                    |> Async.StartAsTask
-                    :> Task
                     |> Some
                 | _ -> None
         )
@@ -217,8 +210,6 @@ module Exiling =
                     |> onProfileSearch
                     |> sendMessagesAsync sm
                     |> Async.Ignore
-                    |> Async.StartAsTask
-                    :> Task
                     |> Some
                 Complex (fun cp sm ->
                     match sm.Content with
@@ -278,20 +269,17 @@ module Exiling =
                             |> Async.Ignore
                             |> Async.Start
                         }
-                        |> Async.StartAsTask
-                        :> Task
                         |> Some
                     | ContainsI "getProfile" when sm.MentionedUsers.Count = 1 ->
                         let un = sm.MentionedUsers |> Seq.head
                         serveProfile sm cp un.Username
+
                     | AfterI "getProfile " (UserName userName) ->
                         serveProfile sm cp userName
                     | RMatch "getProfile\s*$" _ ->
                         getAuthorProfile sm.Author cp
                         |> sendMessagesAsync sm
                         |> Async.Ignore
-                        |> Async.StartAsTask
-                        :> Task
                         |> Some
                     | _ -> None
                 )
@@ -315,7 +303,7 @@ module Exiling =
                 | After "getStat " (Quoted (ValueString stat,Link uri)) ->
                     printfn "we have a full get stat request"
                     match getMappedNodes contentPath with
-                    | None -> Some(sendMessageAsync sm "No node information available" :> Task)
+                    | None -> Some(sendMessageAsync sm "No node information available")
                     | Some nc ->
                         printfn "node information found"
                         let search = stat
@@ -324,7 +312,7 @@ module Exiling =
                         //        "% increased Spell Damage"
                         //    | _ -> stat
                         match PassiveParsing.decodeUrl nc.nodes uri with
-                        | None -> Some(sendMessageAsync sm "Tree decoding failed" :> Task)
+                        | None -> Some(sendMessageAsync sm "Tree decoding failed")
                         | Some treeInfo ->
                             printfn "Conducting Search"
                             let relevantValues=
@@ -334,11 +322,11 @@ module Exiling =
                                 |> List.ofSeq
                             printfn "Search completed"
                             let count = relevantValues.Length
-                            Some(sendMessageAsync sm <| sprintf "Found %i nodes with %s in the tree" count stat :> Task)
+                            Some(sprintf "Found %i nodes with %s in the tree" count stat |> sendMessageAsync sm)
                 | After "getStat " (Quoted (ValueString stat,_))
                 | After "getStat " (Quoted (ValueString stat,_)) ->
                     match getMappedNodes contentPath with
-                    | None -> Some(sendMessageAsync sm "No node information available" :> Task)
+                    | None -> Some(sendMessageAsync sm "No node information available")
                     | Some nc ->
                         let search =
                             match stat with
@@ -351,8 +339,9 @@ module Exiling =
                             |> Seq.filter (fun x -> x.EndsWith search)
                             |> List.ofSeq
                         let count = relevantValues.Length
-                        Some(sendMessageAsync sm <| sprintf "Found %i nodes with %s" count stat :> Task)
+                        Some(sendMessageAsync sm <| sprintf "Found %i nodes with %s" count stat)
                 | _ -> None
+                |> Option.map Async.Ignore
 
             )
         }
@@ -376,13 +365,13 @@ module Exiling =
                     |> Option.map(fun x ->
                             let display = Reflection.fDisplay x
                             sendMessageAsync sm <| display
-                            :> Task
+                            |> Async.Ignore
                     )
                 | After "getClass " _ ->
                     sprintf "@%s !getClass uri must be surrounded by <> or `" sm.Author.Username
                     //|> SocketMessage.deleteAndReply sm 
                     |> sendMessageAsync  sm
-                    :> Task
+                    |> Async.Ignore
                     |> Some
                 | _ -> None
             )

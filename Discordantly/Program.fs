@@ -55,8 +55,16 @@ let msgAsync (fClient:unit -> DiscordSocketClient) (sm:SocketMessage) : Task =
             | Simpleton lines ->
                 send lines
             | NotSimpleton (cmdName, help, ReplyType.Complex f) ->
-                match f (ClientProxy client) sm with
-                | Some r -> r |> ignore<Task>
+
+                let cp = new ClientProxy(client)
+                match f cp sm with
+                | Some r ->
+                    async {
+                        do! r
+                        cp.Dispose()
+                        ()
+                    }
+                    |> Async.Start
                 | None ->
                     sprintf "Could not understand command arguments for `%s`" cmdName::help
                     |> send
