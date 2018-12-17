@@ -201,6 +201,7 @@ module Exiling =
                     | AfterI "getProfiles" (NonValueString _) ->
                         let getUserInfo u pn =
                             async{
+                                // go ahead and send the message about the user, edit later if we can get the other stuff
                                 let! msg = sm.Channel.SendMessageAsync <| sprintf "%s is Exile %s" u pn
                                 match! HtmlParsing.getCharacters pn with
                                 | HtmlParsing.GetResult.FailedDeserialize -> ()
