@@ -71,8 +71,8 @@ module Exiling =
     open Schema.Helpers.StringPatterns
     type private ExileMap = Map<uint64,string>
     module Impl =
-        open PathOfExile.Domain
 
+        open PathOfSupporting
         type LikeAProperty<'t>(initialValue:'t,fSideEffect) =
             let mutable value = initialValue
             member __.Value
@@ -107,8 +107,8 @@ module Exiling =
                             sprintf "You just got served <https://www.pathofexile.com/account/view-profile/%s/characters>" pn
                         ]
                     async{
-                        match! PathOfExile.Domain.HtmlParsing.getCharacters pn with
-                        | HtmlParsing.GetResult.FailedDeserialize ->
+                        match! PathOfSupporting.HtmlParsing.getCharacters pn with
+                        | PathOfSupporting.HtmlParsing.GetResult.FailedDeserialize _ ->
                             return baseResponse@[sprintf "Could not find characters"]
                         | HtmlParsing.GetResult.Success chars ->
                             let lines =
@@ -145,10 +145,10 @@ module Exiling =
 
     open Impl
     open System.Net.Sockets
-    open PathOfExile.Domain.TreeParsing.PassiveJsParsing
-    open PathOfExile.Domain.TreeParsing.PathOfBuildingParsing
+    open PathOfSupporting.TreeParsing.PassiveJsParsing
+    open PathOfSupporting.TreeParsing.PathOfBuildingParsing
     open Schema.Helpers
-    module HtmlParsing = PathOfExile.Domain.HtmlParsing
+    module HtmlParsing = PathOfSupporting.HtmlParsing
 
     let setProfile:string*NotSimple =
         "setProfile",
@@ -219,7 +219,7 @@ module Exiling =
                                 // go ahead and send the message about the user, edit later if we can get the other stuff
                                 let! msg = sm.Channel.SendMessageAsync <| sprintf "%s is Exile %s" u pn
                                 match! HtmlParsing.getCharacters pn with
-                                | HtmlParsing.GetResult.FailedDeserialize -> ()
+                                | HtmlParsing.GetResult.FailedDeserialize _ -> ()
                                 | HtmlParsing.GetResult.Success chars ->
                                     let highlightChar =
                                         chars
@@ -286,12 +286,12 @@ module Exiling =
         }
     let getMappedNodes directory =
         match Impl.getMappedNodes directory with
-        | Some nc ->
+        | Ok nc ->
             nodeCache <- Some nc
-            Some nc
-        | None -> None
-    module PassiveParsing = PathOfExile.Domain.TreeParsing.PassiveJsParsing
-    module Gems = PathOfExile.Domain.TreeParsing.Gems
+            Ok nc
+        | x -> x
+    module PassiveParsing = PathOfSupporting.TreeParsing.PassiveJsParsing
+    module Gems = PathOfSupporting.TreeParsing.Gems
     let getStat =
         "getStat",
         {
@@ -303,8 +303,8 @@ module Exiling =
                 | After "getStat " (Quoted (ValueString stat,Link uri)) ->
                     printfn "we have a full get stat request"
                     match getMappedNodes contentPath with
-                    | None -> Some(sendMessageAsync sm "No node information available")
-                    | Some nc ->
+                    | Error _ -> Some(sendMessageAsync sm "No node information available")
+                    | Ok nc ->
                         printfn "node information found"
                         let search = stat
                         //    match stat with
@@ -326,8 +326,8 @@ module Exiling =
                 | After "getStat " (Quoted (ValueString stat,_))
                 | After "getStat " (Quoted (ValueString stat,_)) ->
                     match getMappedNodes contentPath with
-                    | None -> Some(sendMessageAsync sm "No node information available")
-                    | Some nc ->
+                    | Error _ -> Some(sendMessageAsync sm "No node information available")
+                    | Ok nc ->
                         let search =
                             match stat with
                             | "Spell Damage" ->
@@ -357,16 +357,25 @@ module Exiling =
                     let reggie = Impl.regPassiveTree uri
                     printfn "Found uri, worked?%A, he's:%s" reggie.IsSome uri
                     reggie
-                    |> Option.bind (fun _ ->
+                    |> function
+                        |Some x -> Ok x
+                        |None -> Result.Error("passive tree did not load", None)
+
+                    |> Result.bind (fun _ ->
                         getMappedNodes System.Environment.CurrentDirectory
                     )
-                    |> Option.bind(fun nc -> decodeUrl nc.nodes uri)
-                    |> Option.bind(fun tree -> tree.Class)
-                    |> Option.map(fun x ->
+                    |> Result.bind(fun nc ->
+                        match decodeUrl nc.nodes uri with
+                        | Some x -> Ok x.Class
+                        | None -> Result.Error("Decode failed",None)
+                    )
+                    |> function
+                        |Ok x ->
                             let display = Reflection.fDisplay x
                             sendMessageAsync sm <| display
                             |> Async.Ignore
-                    )
+                            |> Some
+                        | _ -> None
                 | After "getClass " _ ->
                     sprintf "@%s !getClass uri must be surrounded by <> or `" sm.Author.Username
                     //|> SocketMessage.deleteAndReply sm 

@@ -14,10 +14,10 @@
 
   <ItemGroup>
     <PackageReference Include="Discord.Net" Version="1.0.2" />
+    <PackageReference Include="PathOfSupporting" Version="0.0.1-beta3" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PathOfExile.Domain\PathOfExile.Domain.fsproj" />
     <ProjectReference Include="..\Schema\Schema.fsproj" />
   </ItemGroup>
 

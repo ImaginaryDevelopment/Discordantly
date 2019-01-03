@@ -5,11 +5,9 @@ VisualStudioVersion = 15.0.28306.52
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Discordantly", "Discordantly\Discordantly.fsproj", "{038E544E-201B-404C-B01F-60DBAF438B63}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "PathOfExile.Domain", "PathOfExile.Domain\PathOfExile.Domain.fsproj", "{41B3FF81-D073-4B25-96FF-D37A56B96689}"
-EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Schema", "Schema\Schema.fsproj", "{5599A375-557B-4A9E-9833-B8470C9DCEE3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AlwaysOnIt", "AlwaysOnIt\AlwaysOnIt.fsproj", "{B7618BA4-3993-4B42-88D8-8F6D5085CD78}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "AlwaysOnIt", "AlwaysOnIt\AlwaysOnIt.fsproj", "{B7618BA4-3993-4B42-88D8-8F6D5085CD78}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,10 +19,6 @@ Global
 		{038E544E-201B-404C-B01F-60DBAF438B63}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{038E544E-201B-404C-B01F-60DBAF438B63}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{038E544E-201B-404C-B01F-60DBAF438B63}.Release|Any CPU.Build.0 = Release|Any CPU
-		{41B3FF81-D073-4B25-96FF-D37A56B96689}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{41B3FF81-D073-4B25-96FF-D37A56B96689}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{41B3FF81-D073-4B25-96FF-D37A56B96689}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{41B3FF81-D073-4B25-96FF-D37A56B96689}.Release|Any CPU.Build.0 = Release|Any CPU
 		{5599A375-557B-4A9E-9833-B8470C9DCEE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5599A375-557B-4A9E-9833-B8470C9DCEE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5599A375-557B-4A9E-9833-B8470C9DCEE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
